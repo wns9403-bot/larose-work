@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>할 일 관리</title>
+<style>
+  :root {
+    --navy: #1e2a4a;
+    --blue: #3b6ea5;
+    --accent: #4a7fc0;
+    --light: #f4f6fa;
+    --line: #e2e6ee;
+    --text: #2b2f38;
+    --muted: #8a909c;
+    --done: #b4bac6;
+    --danger: #d9534f;
+    --shadow: 0 8px 30px rgba(30,42,74,.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "맑은 고딕", "Malgun Gothic", -apple-system, sans-serif;
+    background: linear-gradient(160deg, #eef1f7 0%, #dde3ef 100%);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  .app {
+    width: 100%;
+    max-width: 560px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  header h1 {
+    color: var(--navy);
+    font-size: 30px;
+    letter-spacing: -.5px;
+  }
+  header p {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 6px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .input-row {
+    display: flex;
+    gap: 10px;
+    padding: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  #newTodo {
+    flex: 1;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    padding: 13px 15px;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s;
+  }
+  #newTodo:focus { border-color: var(--accent); }
+  .add-btn {
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 0 22px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s;
+  }
+  .add-btn:hover { background: var(--blue); }
+  .add-btn:active { transform: translateY(1px); }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .filters { display: flex; gap: 6px; }
+  .filter {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 6px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all .15s;
+  }
+  .filter:hover { background: var(--light); }
+  .filter.active { background: var(--navy); color: #fff; }
+  .count { color: var(--muted); }
+  .count b { color: var(--navy); }
+
+  ul { list-style: none; }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--line);
+    animation: slidein .2s ease;
+  }
+  @keyframes slidein {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  li:last-child { border-bottom: none; }
+  .check {
+    width: 22px; height: 22px;
+    border: 2px solid var(--line);
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+  }
+  .check:hover { border-color: var(--accent); }
+  li.done .check {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .check svg { opacity: 0; transition: opacity .15s; }
+  li.done .check svg { opacity: 1; }
+  .label {
+    flex: 1;
+    font-size: 15px;
+    cursor: pointer;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+  li.done .label {
+    color: var(--done);
+    text-decoration: line-through;
+  }
+  .label-edit {
+    flex: 1;
+    font-size: 15px;
+    font-family: inherit;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    padding: 7px 10px;
+    outline: none;
+  }
+  .del {
+    background: transparent;
+    border: none;
+    color: var(--done);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    transition: all .15s;
+  }
+  .del:hover { color: var(--danger); background: #fdeaea; }
+
+  .empty {
+    text-align: center;
+    padding: 56px 20px;
+    color: var(--muted);
+  }
+  .empty .ico { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid var(--line);
+  }
+  .clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 4px 0;
+  }
+  .clear-btn:hover { color: var(--danger); }
+  .clear-btn:disabled { opacity: .4; cursor: default; }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>할 일 관리</h1>
+      <p>오늘 해야 할 일을 정리해 보세요</p>
+    </header>
+
+    <div class="card">
+      <div class="input-row">
+        <input id="newTodo" type="text" placeholder="할 일을 입력하고 Enter를 누르세요" maxlength="200" autofocus>
+        <button class="add-btn" id="addBtn">추가</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="filters">
+          <button class="filter active" data-filter="all">전체</button>
+          <button class="filter" data-filter="active">진행 중</button>
+          <button class="filter" data-filter="done">완료</button>
+        </div>
+        <span class="count" id="count"></span>
+      </div>
+
+      <ul id="list"></ul>
+
+      <footer>
+        <button class="clear-btn" id="clearBtn">완료 항목 비우기</button>
+      </footer>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "todo-app-v1";
+  var todos = load();
+  var filter = "all";
+
+  var listEl = document.getElementById("list");
+  var inputEl = document.getElementById("newTodo");
+  var countEl = document.getElementById("count");
+  var clearBtn = document.getElementById("clearBtn");
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(todos)); } catch (e) {}
+  }
+
+  function addTodo(text) {
+    text = text.trim();
+    if (!text) return;
+    todos.unshift({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), text: text, done: false });
+    save();
+    render();
+  }
+  function toggle(id) {
+    var t = todos.find(function (x) { return x.id === id; });
+    if (t) { t.done = !t.done; save(); render(); }
+  }
+  function remove(id) {
+    todos = todos.filter(function (x) { return x.id !== id; });
+    save();
+    render();
+  }
+  function edit(id, text) {
+    var t = todos.find(function (x) { return x.id === id; });
+    if (!t) return;
+    text = text.trim();
+    if (text) { t.text = text; } else { todos = todos.filter(function (x) { return x.id !== id; }); }
+    save();
+    render();
+  }
+  function clearDone() {
+    todos = todos.filter(function (x) { return !x.done; });
+    save();
+    render();
+  }
+
+  var CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  function render() {
+    var visible = todos.filter(function (t) {
+      if (filter === "active") return !t.done;
+      if (filter === "done") return t.done;
+      return true;
+    });
+
+    listEl.innerHTML = "";
+
+    if (visible.length === 0) {
+      var msg = filter === "done" ? "완료된 할 일이 없습니다"
+              : filter === "active" ? "진행 중인 할 일이 없습니다"
+              : "할 일이 없습니다. 위에서 추가해 보세요!";
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.innerHTML = '<div class="ico">📝</div><p>' + msg + '</p>';
+      listEl.appendChild(empty);
+    } else {
+      visible.forEach(function (t) {
+        var li = document.createElement("li");
+        if (t.done) li.className = "done";
+
+        var check = document.createElement("div");
+        check.className = "check";
+        check.innerHTML = CHECK_SVG;
+        check.title = t.done ? "진행 중으로 변경" : "완료로 표시";
+        check.addEventListener("click", function () { toggle(t.id); });
+
+        var label = document.createElement("span");
+        label.className = "label";
+        label.textContent = t.text;
+        label.title = "더블클릭하여 수정";
+        label.addEventListener("dblclick", function () { startEdit(li, t, label); });
+
+        var del = document.createElement("button");
+        del.className = "del";
+        del.innerHTML = "&times;";
+        del.title = "삭제";
+        del.addEventListener("click", function () { remove(t.id); });
+
+        li.appendChild(check);
+        li.appendChild(label);
+        li.appendChild(del);
+        listEl.appendChild(li);
+      });
+    }
+
+    var remaining = todos.filter(function (t) { return !t.done; }).length;
+    countEl.innerHTML = "남은 일 <b>" + remaining + "</b>개 / 전체 " + todos.length + "개";
+    clearBtn.disabled = !todos.some(function (t) { return t.done; });
+  }
+
+  function startEdit(li, t, label) {
+    var input = document.createElement("input");
+    input.className = "label-edit";
+    input.value = t.text;
+    input.maxLength = 200;
+    li.replaceChild(input, label);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    var finished = false;
+    function finish(commit) {
+      if (finished) return;
+      finished = true;
+      if (commit) { edit(t.id, input.value); } else { render(); }
+    }
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", function () { finish(true); });
+  }
+
+  document.getElementById("addBtn").addEventListener("click", function () {
+    addTodo(inputEl.value);
+    inputEl.value = "";
+    inputEl.focus();
+  });
+  inputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      addTodo(inputEl.value);
+      inputEl.value = "";
+    }
+  });
+  clearBtn.addEventListener("click", clearDone);
+
+  document.querySelectorAll(".filter").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".filter").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      filter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
