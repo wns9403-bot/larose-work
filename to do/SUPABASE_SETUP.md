@@ -99,10 +99,45 @@ Vercel 배포 시엔 Vercel 대시보드 → 프로젝트 → **Settings → Env
 
 ---
 
-## 5단계 이후 (제가 처리)
+## 5단계. 변경 기록 + 실시간 동기화 활성화 (직접 — 복붙 1회)
 
-- 보드를 Next.js 앱 `/team` 경로에 연결
-- 저장 로직(localStorage → Supabase) 교체
-- Vercel 배포 → 팀원 공유 주소 발급
+React 전환 후 추가된 기능(누가 뭘 수정했는지 기록 + 새로고침 없는 실시간 반영)을 켜려면
+**SQL Editor**에서 아래를 한 번 실행하세요:
 
-3단계까지 끝나면 알려주세요. 그다음 코드 연결을 진행합니다.
+```sql
+-- 변경 기록 테이블
+create table if not exists activity_log (
+  id bigint generated always as identity primary key,
+  actor text not null,
+  action text not null,
+  target text,
+  detail jsonb,
+  created_at timestamptz default now()
+);
+alter table activity_log enable row level security;
+create policy "allow all" on activity_log for all using (true) with check (true);
+
+-- 실시간 동기화 (테이블 변경을 접속자 전원에게 푸시)
+do $$ declare t text;
+begin
+  foreach t in array array['tasks','members','stores','issues','member_archive','activity_log'] loop
+    begin
+      execute format('alter publication supabase_realtime add table %I', t);
+    exception when duplicate_object then null;
+    end;
+  end loop;
+end $$;
+```
+
+> 실행 전에도 앱은 정상 동작합니다(저장·불러오기 OK).
+> 이 SQL은 "실시간 푸시"와 "변경 기록"만 추가로 켜는 것입니다.
+
+---
+
+## 완료된 것 (개발)
+
+- 보드가 Next.js 앱 `/team` 경로로 전환됨 (React)
+- 팀원별 PIN 로그인 (기본 1234, 팀원 설정에서 변경)
+- 모든 수정에 이름 기록 (헤더 🕘 변경 기록)
+- Supabase 실시간 구독 — 팀원 변경사항 즉시 반영
+- 모바일: 하단 탭 바 + 반응형

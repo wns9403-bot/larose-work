@@ -12,9 +12,9 @@ export default function NavBar() {
         <Link href="/dashboard" className={`site-nav-link ${path === "/dashboard" ? "site-nav-active" : ""}`}>
           매출 대시보드
         </Link>
-        <a href="/team.html" className="site-nav-link">
+        <Link href="/team" className={`site-nav-link ${path === "/team" ? "site-nav-active" : ""}`}>
           팀 업무 보드
-        </a>
+        </Link>
       </div>
     </nav>
   );

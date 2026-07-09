@@ -13,6 +13,7 @@
     "briefing": "node briefing.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.1",
     "exceljs": "^4.4.0",
     "next": "15.5.19",
     "react": "19.0.0",

@@ -28,3 +28,9 @@ next-env.d.ts
 
 # vercel
 .vercel
+
+.vercel
+
+# local
+*.xlsx
+.claude/
