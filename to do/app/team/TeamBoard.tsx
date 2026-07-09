@@ -64,6 +64,7 @@ export default function TeamBoard() {
   const [archiveModal, setArchiveModal] = useState(false);
   const [activityModal, setActivityModal] = useState(false);
   const [weeklyAlert, setWeeklyAlert] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const isLeader = me !== null && members.length > 0 && me === members[0].name;
 
@@ -340,33 +341,53 @@ export default function TeamBoard() {
         </div>
         <div className="h-divider" />
         <div className="h-me">
-          <span className="h-me-label">나는</span>
-          <span className="h-me-name">
-            <span className="av av-sm" style={{ background: meMember.color }}>
-              {meMember.icon || me.slice(0, 2)}
-            </span>
-            {me}
+          <span className="av av-sm" style={{ background: meMember.color }}>
+            {meMember.icon || me.slice(0, 2)}
           </span>
+          <span className="h-me-name">{me}</span>
         </div>
+        <span className="h-sync" title={live ? "실시간 동기화 연결됨" : "실시간 연결 대기 (저장은 정상 작동)"}>
+          <span className={`h-sync-dot ${live ? "on" : ""}`} />
+          <span className="h-sync-text">{live ? "실시간" : "오프라인"}</span>
+        </span>
         <div className="h-grow" />
         <div className="h-actions">
-          <span className="h-sync" title={live ? "실시간 동기화 연결됨" : "실시간 연결 대기 (저장은 정상 작동)"}>
-            <span className={`h-sync-dot ${live ? "on" : ""}`} />
-            <span className="h-sync-text">{live ? "실시간" : "오프라인"}</span>
-          </span>
-          <button className="btn btn-icon-only" title="변경 기록" onClick={() => setActivityModal(true)}>🕘</button>
+          <button className="btn btn-icon-only h-desktop-only" title="변경 기록" onClick={() => setActivityModal(true)}>🕘</button>
           {isLeader && (
             <>
-              <button className="btn btn-ghost" title="매장 설정" onClick={() => setStoreModal(true)}>
-                🏬 <span className="store-btn-text">매장 설정</span>
+              <button className="btn btn-ghost h-desktop-only" title="매장 설정" onClick={() => setStoreModal(true)}>
+                🏬 <span>매장 설정</span>
               </button>
-              <button className="btn btn-ghost" title="팀원 설정" onClick={() => setMemberModal(true)}>
-                ⚙ <span className="team-btn-text">팀원 설정</span>
+              <button className="btn btn-ghost h-desktop-only" title="팀원 설정" onClick={() => setMemberModal(true)}>
+                ⚙ <span>팀원 설정</span>
               </button>
             </>
           )}
-          <button className="btn btn-primary" onClick={() => setTaskModal({ open: true, task: null })}>+ 업무 추가</button>
-          <button className="btn btn-icon-only" title="로그아웃" onClick={logout}>⎋</button>
+          <button className="btn btn-primary" onClick={() => setTaskModal({ open: true, task: null })}>
+            <span className="h-add-full">+ 업무 추가</span>
+            <span className="h-add-short">＋</span>
+          </button>
+          <button className="btn btn-icon-only h-desktop-only" title="로그아웃" onClick={logout}>⎋</button>
+
+          {/* 모바일 전용: 보조 액션 묶음 */}
+          <div className="h-more-wrap">
+            <button className="btn btn-icon-only h-more-btn" title="더보기" onClick={() => setMoreOpen((o) => !o)}>⋯</button>
+            {moreOpen && (
+              <>
+                <div className="h-more-backdrop" onClick={() => setMoreOpen(false)} />
+                <div className="h-more-menu">
+                  <button onClick={() => { setActivityModal(true); setMoreOpen(false); }}>🕘 변경 기록</button>
+                  {isLeader && (
+                    <>
+                      <button onClick={() => { setStoreModal(true); setMoreOpen(false); }}>🏬 매장 설정</button>
+                      <button onClick={() => { setMemberModal(true); setMoreOpen(false); }}>⚙ 팀원 설정</button>
+                    </>
+                  )}
+                  <button className="h-more-danger" onClick={() => { setMoreOpen(false); logout(); }}>⎋ 로그아웃</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

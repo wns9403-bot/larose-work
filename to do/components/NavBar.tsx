@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 export default function NavBar() {
   const path = usePathname();
+  if (path.startsWith("/team")) return null;
   return (
     <nav className="site-nav">
       <span className="site-nav-brand">larosée</span>
