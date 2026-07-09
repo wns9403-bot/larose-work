@@ -191,7 +191,7 @@ export function memberStats(m: Member, i: number, f: Task[]): MemberStat {
   const active = list.filter((t) => t.status !== "완료")
     .sort((a, b) => taskProgress(b) - taskProgress(a) || priOf(a.priority).rank - priOf(b.priority).rank)
     .slice(0, 3);
-  return { member: m, role: i === 0 ? "그룹장" : "팀원 " + i, list, total, done, doing, waiting, overdue, avg, active };
+  return { member: m, role: i === 0 ? "그룹장" : "매니저 " + i, list, total, done, doing, waiting, overdue, avg, active };
 }
 
 export function taskUrgencyRank(t: Task) {

@@ -171,7 +171,7 @@ export function MemberSettingsModal({
                   {m.icon || initials(m.name || DEFAULT_MEMBERS[i]?.name || "?")}
                 </span>
                 <div className="slot-info">
-                  <div className="slot-role">{i === 0 ? "그룹장" : "팀원 " + i}</div>
+                  <div className="slot-role">{i === 0 ? "그룹장" : "매니저 " + i}</div>
                   <input value={m.name} onChange={(e) => set(i, { name: e.target.value })}
                     placeholder={DEFAULT_MEMBERS[i]?.name || ""} />
                 </div>
@@ -581,7 +581,7 @@ export function LoginGate({
               <span className="av av-md" style={{ background: m.color }}>{avatarGlyph(m)}</span>
               <span>
                 <span className="login-member-name" style={{ display: "block" }}>{m.name}</span>
-                <span className="login-member-role">{i === 0 ? "그룹장" : "팀원 " + i}</span>
+                <span className="login-member-role">{i === 0 ? "그룹장" : "매니저 " + i}</span>
               </span>
             </button>
           ))}

@@ -236,7 +236,7 @@ export function DashboardView({
             <div className="personal-name">
               <Avatar m={m} size="lg" />
               <div>
-                <div className="personal-role">{mi === 0 ? "그룹장" : "팀원 " + mi}</div>
+                <div className="personal-role">{mi === 0 ? "그룹장" : "매니저 " + mi}</div>
                 <div className="personal-title">{me}님, 현재 진행률은 {avg}%입니다</div>
                 <div className="personal-copy">
                   {done}/{total}개 완료 · 진행 {doing}개 · 대기 {waiting}개
