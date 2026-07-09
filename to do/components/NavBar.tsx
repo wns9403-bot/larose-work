@@ -9,9 +9,6 @@ export default function NavBar() {
     <nav className="site-nav">
       <span className="site-nav-brand">larosée</span>
       <div className="site-nav-links">
-        <Link href="/dashboard" className={`site-nav-link ${path === "/dashboard" ? "site-nav-active" : ""}`}>
-          매출 대시보드
-        </Link>
         <Link href="/team" className={`site-nav-link ${path === "/team" ? "site-nav-active" : ""}`}>
           팀 업무 보드
         </Link>
