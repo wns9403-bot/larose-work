@@ -116,8 +116,9 @@ function RingCardRow({ stats }: { stats: MemberStat[] }) {
             </div>
             <div className="ring-chips">
               <span className="rc rc-total">{s.total}개</span>
-              <span className="rc rc-done">완료 {s.done}</span>
+              {s.waiting > 0 && <span className="rc rc-wait">대기 {s.waiting}</span>}
               <span className="rc rc-prog">진행 {s.doing}</span>
+              <span className="rc rc-done">완료 {s.done}</span>
               {s.overdue > 0 && <span className="rc rc-over">지연 {s.overdue}</span>}
             </div>
           </div>
@@ -248,8 +249,9 @@ export function DashboardView({
           </div>
           <div className="personal-percent"><b>{avg}%</b><span>내 업무 진행률</span></div>
         </div>
-        <div className="dash-kpis">
+        <div className="dash-kpis dash-kpis-5">
           <div className="kpi-card"><div className="kpi-label">오늘 할 일</div><div className="kpi-value">{today.length}</div><div className="kpi-sub">일일/오늘 마감</div></div>
+          <div className="kpi-card"><div className="kpi-label">대기</div><div className="kpi-value">{waiting}</div><div className="kpi-sub">착수 전</div></div>
           <div className="kpi-card"><div className="kpi-label">진행중</div><div className="kpi-value warn">{doing}</div><div className="kpi-sub">처리 중인 업무</div></div>
           <div className="kpi-card"><div className="kpi-label">지연</div><div className={`kpi-value ${overdue.length ? "danger" : ""}`}>{overdue.length}</div><div className="kpi-sub">마감 초과</div></div>
           <div className="kpi-card"><div className="kpi-label">완료</div><div className="kpi-value good">{done}</div><div className="kpi-sub">{total ? Math.round((done / total) * 100) : 0}% 완료</div></div>
@@ -281,6 +283,7 @@ export function DashboardView({
   const total = f.length;
   const done = f.filter((t) => t.status === "완료").length;
   const doing = f.filter((t) => t.status === "진행중").length;
+  const waiting = f.filter((t) => t.status === "대기").length;
   const overdue = f.filter(isOverdue).length;
   const avg = total ? Math.round(f.reduce((s, t) => s + taskProgress(t), 0) / total) : 0;
   const attention = f
@@ -297,8 +300,9 @@ export function DashboardView({
         </div>
         <div className="dash-updated">{updated}</div>
       </div>
-      <div className="dash-kpis">
+      <div className="dash-kpis dash-kpis-5">
         <div className="kpi-card"><div className="kpi-label">팀 전체 진행률</div><div className="kpi-value">{avg}%</div><div className="kpi-sub">{done}/{total}개 완료</div></div>
+        <div className="kpi-card"><div className="kpi-label">대기 업무</div><div className="kpi-value">{waiting}</div><div className="kpi-sub">착수 전</div></div>
         <div className="kpi-card"><div className="kpi-label">진행중 업무</div><div className="kpi-value warn">{doing}</div><div className="kpi-sub">현재 처리 중</div></div>
         <div className="kpi-card"><div className="kpi-label">완료 업무</div><div className="kpi-value good">{done}</div><div className="kpi-sub">{total ? Math.round((done / total) * 100) : 0}% 완료</div></div>
         <div className="kpi-card"><div className="kpi-label">지연 업무</div><div className={`kpi-value ${overdue ? "danger" : ""}`}>{overdue}</div><div className="kpi-sub">마감 초과</div></div>
@@ -385,10 +389,11 @@ export function TeamDetailView({
               <div className="mpc-percent">{s.avg}%</div>
             </div>
             <div className="dash-bar"><div className="dash-bar-fill" style={{ width: `${s.avg}%`, background: s.member.color }} /></div>
-            <div className="mpc-meta">
+            <div className="mpc-meta mpc-meta-5">
               <div className="mpc-chip"><b>{s.total}</b><span>전체</span></div>
-              <div className="mpc-chip"><b>{s.done}</b><span>완료</span></div>
+              <div className="mpc-chip"><b>{s.waiting}</b><span>대기</span></div>
               <div className="mpc-chip"><b>{s.doing}</b><span>진행</span></div>
+              <div className="mpc-chip"><b>{s.done}</b><span>완료</span></div>
               <div className={`mpc-chip ${s.overdue ? "danger" : ""}`}><b>{s.overdue}</b><span>지연</span></div>
             </div>
             <div className="mpc-list">
