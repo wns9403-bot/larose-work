@@ -55,6 +55,38 @@ export type Activity = {
   created_at: string;
 };
 
+/* ─── 주간회의 점검표 ─── */
+export type StorePerf = {
+  id: string; store: string; grade: string;
+  target: number; actual: number; vsLastWeek: string;
+  partLeadReport: boolean; cause: string;
+};
+export type WeeklyMetric = { key: string; label: string; lastWeek: number; thisWeek: number };
+export type KeyProduct = { key: string; label: string; qty: number; rank: string; action: string };
+export type PartLeadCheck = {
+  id: string; partLead: string; store: string;
+  reportWritten: boolean; feedback: boolean; compliance: boolean; note: string;
+};
+export type Vacancy = { id: string; store: string; count: number; progress: string; targetDate: string; note: string };
+export type ActionItem = {
+  id: string; priority: string; task: string; assignee: string;
+  deadline: string; done: boolean; note: string;
+};
+export type WeeklyReport = {
+  id: string; round: string; meetingDate: string; author: string; duration: string;
+  storePerf: StorePerf[];
+  metrics: WeeklyMetric[];
+  products: KeyProduct[];
+  partLeadChecks: PartLeadCheck[];
+  vacancies: Vacancy[];
+  actionItems: ActionItem[];
+  nextWeekSchedule: string;
+  notes: string;
+  reportToMgmt: string;
+  updated_at?: number;
+  updated_by?: string;
+};
+
 /* ─── 상수 ─── */
 export const DEFAULT_MEMBERS: Member[] = [
   { name: "그룹장", color: "#0092ce", icon: "", pin: "1234" },
@@ -110,6 +142,20 @@ export const ROUTINES: Record<string, string> = {
 };
 export const DAYS_KR = ["월", "화", "수", "목", "금"];
 export const AVATAR_ICONS = ["🦁","🐯","🐰","🐻","🐼","🦊","🐨","🐧","🐬","🦉","🐝","🌟","🔥","🍀","💎","🚀"];
+
+export const DEFAULT_METRICS: Omit<WeeklyMetric, "lastWeek" | "thisWeek">[] = [
+  { key: "perHead", label: "인당 매출" },
+  { key: "aov", label: "객단가" },
+  { key: "purchases", label: "구매 건수" },
+  { key: "monthSameWeek", label: "전월 동일주차 대비" },
+];
+export const DEFAULT_PRODUCTS: Omit<KeyProduct, "qty" | "rank" | "action">[] = [
+  { key: "hyaluronic", label: "히알루론산 세럼" },
+  { key: "ecoRefill", label: "에코 리필" },
+  { key: "whiteMud", label: "화이트 머드 스틱" },
+  { key: "hydraStick", label: "수분스틱" },
+];
+export const CORE_STORES = ["롯데 소공본점", "롯데 잠실점", "롯데 부산본점", "롯데 노원점"];
 
 /* ─── 기본 헬퍼 ─── */
 export const priOf = (k: string) => PRIORITIES.find((p) => p.key === k) || PRIORITIES[2];
@@ -205,6 +251,49 @@ export function weekKey() {
   const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return ymd(monday);
 }
+export function mondayOf(d: Date): Date {
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+export function isoWeekLabel(d: Date): string {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - day + 3);
+  const firstThu = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((t.getTime() - firstThu.getTime()) / 864e5 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
+  return `W${week}`;
+}
+export const achievementRate = (target: number, actual: number) =>
+  target > 0 ? Math.round((actual / target) * 100) : 0;
+export const changeRate = (last: number, cur: number) =>
+  last > 0 ? Math.round(((cur - last) / last) * 100) : cur > 0 ? 100 : 0;
+
+export function rid(prefix: string) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36)}`;
+}
+
+export function defaultWeeklyReport(monday: Date, author: string): WeeklyReport {
+  return {
+    id: ymd(monday),
+    round: isoWeekLabel(monday),
+    meetingDate: ymd(monday),
+    author,
+    duration: "30분",
+    storePerf: CORE_STORES.map((store) => ({
+      id: rid("sp"), store, grade: "", target: 0, actual: 0, vsLastWeek: "", partLeadReport: false, cause: "",
+    })),
+    metrics: DEFAULT_METRICS.map((m) => ({ ...m, lastWeek: 0, thisWeek: 0 })),
+    products: DEFAULT_PRODUCTS.map((p) => ({ ...p, qty: 0, rank: "", action: "" })),
+    partLeadChecks: [],
+    vacancies: [],
+    actionItems: [],
+    nextWeekSchedule: "",
+    notes: "",
+    reportToMgmt: "",
+  };
+}
+
 export function weekRange(): [number, number] {
   const d = new Date(); d.setHours(0, 0, 0, 0);
   const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));

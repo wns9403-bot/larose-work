@@ -134,6 +134,25 @@ end $$;
 
 ---
 
+## 6단계. 주간회의 점검표 탭 활성화 (직접 — 복붙 1회)
+
+"주간점검" 탭(롯데 주간회의 점검표 대시보드)을 공용 저장하려면 **SQL Editor**에서 아래를 실행하세요:
+
+```sql
+create table if not exists weekly_reports (
+  id text primary key,
+  data jsonb not null
+);
+alter table weekly_reports enable row level security;
+create policy "allow all" on weekly_reports for all using (true) with check (true);
+
+alter publication supabase_realtime add table weekly_reports;
+```
+
+> 실행 전에도 탭은 동작하지만(로컬 저장 불가, 새로고침 시 사라짐) 팀원 간 공유가 안 됩니다.
+
+---
+
 ## 완료된 것 (개발)
 
 - 보드가 Next.js 앱 `/team` 경로로 전환됨 (React)

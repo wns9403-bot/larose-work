@@ -2,7 +2,7 @@
 "use client";
 
 import { createClient, SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
-import type { Task, Member, Store, Issue, ArchiveEntry, Activity } from "./lib";
+import type { Task, Member, Store, Issue, ArchiveEntry, Activity, WeeklyReport } from "./lib";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
@@ -21,6 +21,7 @@ const MAP = {
   stores: { table: "stores", col: "name", key: "all" },
   issues: { table: "issues", col: "id", key: "all" },
   archive: { table: "member_archive", col: "id", key: "all" },
+  weeklyReports: { table: "weekly_reports", col: "id", key: "all" },
 } as const;
 
 export type DatasetName = keyof typeof MAP;
@@ -31,6 +32,7 @@ export type AllData = {
   stores: Store[] | null;
   issues: Issue[] | null;
   archive: ArchiveEntry[] | null;
+  weeklyReports: WeeklyReport[] | null;
 };
 
 export async function loadAll(): Promise<AllData | null> {
@@ -101,7 +103,7 @@ export function subscribeRealtime(
 
   const tableToName: Record<string, DatasetName> = {
     tasks: "tasks", members: "members", stores: "stores",
-    issues: "issues", member_archive: "archive",
+    issues: "issues", member_archive: "archive", weekly_reports: "weeklyReports",
   };
 
   const ch: RealtimeChannel = c.channel("team-board");

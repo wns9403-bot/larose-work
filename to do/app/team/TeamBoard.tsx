@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import "./team.css";
 import {
-  Task, Member, Store, Issue, ArchiveEntry, Activity,
+  Task, Member, Store, Issue, ArchiveEntry, Activity, WeeklyReport,
   DEFAULT_MEMBERS, DEFAULT_STORES, PRIORITIES,
   normalizeStoreRow, taskProgress, ymd, weekKey, cleanStore,
 } from "./lib";
@@ -14,6 +14,7 @@ import {
 import {
   DashboardView, TeamDetailView, DailyView, WeeklyView, MonthlyView, StoresView,
 } from "./views";
+import { WeeklyReportView } from "./weeklyReport";
 import {
   TaskModal, MemberSettingsModal, StoreSettingsModal, IssueModal,
   ArchiveModal, WeeklyAlertModal, ActivityModal, LoginGate,
@@ -22,7 +23,7 @@ import {
 const LS_SESSION = "larose_session_v1";
 const LS_WEEKALERT = "larose_week_alert_v1";
 
-type TabKey = "dashboard" | "team" | "daily" | "weekly" | "monthly" | "stores";
+type TabKey = "dashboard" | "team" | "daily" | "weekly" | "monthly" | "stores" | "weeklyReport";
 const TABS: { key: TabKey; icon: string; label: string }[] = [
   { key: "dashboard", icon: "📊", label: "대시보드" },
   { key: "team", icon: "👥", label: "팀원별" },
@@ -30,10 +31,12 @@ const TABS: { key: TabKey; icon: string; label: string }[] = [
   { key: "weekly", icon: "📅", label: "주간" },
   { key: "monthly", icon: "🗓", label: "월간" },
   { key: "stores", icon: "🏬", label: "매장" },
+  { key: "weeklyReport", icon: "📝", label: "주간점검" },
 ];
 const TAB_FULL: Record<TabKey, string> = {
   dashboard: "업무 현황 대시보드", team: "팀원별 상세", daily: "일일 업무",
   weekly: "주간 업무", monthly: "월간 캘린더", stores: "담당 매장 대시보드",
+  weeklyReport: "주간회의 점검표",
 };
 
 export default function TeamBoard() {
@@ -44,6 +47,7 @@ export default function TeamBoard() {
   const [stores, setStores] = useState<Store[]>(DEFAULT_STORES);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [archive, setArchive] = useState<ArchiveEntry[]>([]);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [live, setLive] = useState(false);
 
@@ -87,6 +91,7 @@ export default function TeamBoard() {
         else saveDataset("tasks", []);
         if (Array.isArray(d.issues)) setIssues(d.issues);
         if (Array.isArray(d.archive)) setArchive(d.archive);
+        if (Array.isArray(d.weeklyReports)) setWeeklyReports(d.weeklyReports);
       }
       setActivity(await loadActivity());
       /* 세션 복원 */
@@ -114,6 +119,7 @@ export default function TeamBoard() {
         else if (name === "stores") setStores((arr as Store[]).map(normalizeStoreRow).filter((x) => x.name));
         else if (name === "issues") setIssues(arr as Issue[]);
         else if (name === "archive") setArchive(arr as ArchiveEntry[]);
+        else if (name === "weeklyReports") setWeeklyReports(arr as WeeklyReport[]);
       },
       (row) => setActivity((prev) => [row, ...prev].slice(0, 100)),
       (connected) => setLive(connected)
@@ -277,6 +283,13 @@ export default function TeamBoard() {
     const next = issues.filter((i) => i.id !== id);
     setIssues(next); saveDataset("issues", next);
     if (me && x) logActivity(me, "매장 이슈를 삭제했습니다", `${x.store} · ${x.title}`);
+  };
+  const saveWeeklyReport = (r: WeeklyReport) => {
+    const exists = weeklyReports.some((x) => x.id === r.id);
+    const next = exists ? weeklyReports.map((x) => (x.id === r.id ? r : x)) : [...weeklyReports, r];
+    setWeeklyReports(next);
+    saveDataset("weeklyReports", next);
+    if (me) logActivity(me, "주간회의 점검표를 저장했습니다", `${r.round} · ${r.meetingDate}`);
   };
   const deleteArchive = (id: string) => {
     const next = archive.filter((a) => a.id !== id);
@@ -458,6 +471,9 @@ export default function TeamBoard() {
               onStoreClick={(name) => { setStoreFilter(name); setTab("dashboard"); }}
               onOpenIssues={(name) => setIssueModal(name)}
               onOpenSettings={() => setStoreModal(true)} />
+          )}
+          {tab === "weeklyReport" && (
+            <WeeklyReportView reports={weeklyReports} members={members} stores={stores} me={me} onSave={saveWeeklyReport} />
           )}
         </div>
       </div>
