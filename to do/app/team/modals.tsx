@@ -89,13 +89,14 @@ export function TaskModal({
             <label>담당 매장</label>
             {!customStore ? (
               <select
-                value={storeOptions.includes(store) ? store : ""}
+                value={store === "공통" || storeOptions.includes(store) ? store : ""}
                 onChange={(e) => {
                   if (e.target.value === "__custom__") { setCustomStore(true); setStore(""); }
                   else setStore(e.target.value);
                 }}
               >
                 <option value="">미지정</option>
+                <option value="공통">🔗 공통 업무 (매장 무관)</option>
                 {storeOptions.map((n) => <option key={n} value={n}>{n}</option>)}
                 <option value="__custom__">✏️ 직접 입력...</option>
               </select>
