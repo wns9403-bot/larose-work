@@ -254,6 +254,27 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .wk-note{padding:12px 16px;font-size:12px;color:var(--ink3);
   background:var(--surface2);border-top:1px solid var(--border2)}
 
+/* 모바일 전용 요일 카드 (기본은 숨김, 600px 이하에서만 표시) */
+.wk-mobile{display:none;flex-direction:column;gap:12px;padding:14px}
+.wk-day-card{border:1px solid var(--border);border-radius:var(--rad-md);overflow:hidden;background:var(--surface)}
+.wk-day-card.today{border-color:var(--rose);box-shadow:0 0 0 2px var(--rose-soft)}
+.wk-day-head{display:flex;align-items:baseline;gap:8px;padding:12px 14px;background:var(--surface2);border-bottom:1px solid var(--border2)}
+.wk-day-card.today .wk-day-head{background:var(--rose-soft)}
+.wk-day-name{font-size:17px;font-weight:900;color:var(--rose)}
+.wk-day-card.today .wk-day-name{color:var(--rose-deep)}
+.wk-day-date{font-size:12.5px;font-weight:700;color:var(--ink3)}
+.wk-day-card.today .wk-day-date{color:var(--rose)}
+.wk-day-routine{font-size:12.5px;font-weight:700;color:var(--rose-deep);
+  background:var(--rose-soft);padding:9px 14px;line-height:1.5;border-bottom:1px solid var(--border2)}
+.wk-day-member{padding:10px 14px;border-bottom:1px solid var(--border2)}
+.wk-day-member:last-child{border-bottom:none}
+.wk-day-member-head{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:800;color:var(--ink2);margin-bottom:8px}
+.wk-day-tasks{display:flex;flex-direction:column;gap:6px}
+.wk-day-tasks .wk-task-item{font-size:13px;padding:9px 12px}
+.wk-day-tasks .wk-task-item .wt-title{font-size:13px}
+.wk-day-tasks .wk-task-item small{font-size:12px}
+.wk-day-empty{padding:16px 14px;text-align:center;font-size:12.5px;font-weight:600;color:var(--ink3)}
+
 /* ─── 월간 캘린더 ─── */
 .month-header{display:flex;align-items:center;gap:12px;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--rad-lg);
@@ -652,6 +673,8 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 
 /* ─── 반응형 ─── */
 @media(max-width:600px){
+  .wk-scroll{display:none}
+  .wk-mobile{display:flex}
   .tb-header{padding:0 12px;gap:8px}
   .brand-sub{display:none}
   .h-divider{display:none}

@@ -42,6 +42,11 @@ export function TaskModal({
     const owned = stores.filter((s) => s.owner === assignee);
     return (owned.length ? owned : stores).map((s) => s.name);
   }, [stores, assignee]);
+  const [customStore, setCustomStore] = useState(() => !!store && !storeOptions.includes(store));
+  useEffect(() => {
+    if (!customStore && store && !storeOptions.includes(store)) setStore("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignee]);
   const sinfo = storeInfo(stores, store);
 
   const save = () => {
@@ -82,10 +87,30 @@ export function TaskModal({
           </div>
           <div>
             <label>담당 매장</label>
-            <input list="tb-store-options" value={store} onChange={(e) => setStore(e.target.value)} placeholder="예: 롯데 본점" />
-            <datalist id="tb-store-options">
-              {storeOptions.map((n) => <option key={n} value={n} />)}
-            </datalist>
+            {!customStore ? (
+              <select
+                value={storeOptions.includes(store) ? store : ""}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") { setCustomStore(true); setStore(""); }
+                  else setStore(e.target.value);
+                }}
+              >
+                <option value="">미지정</option>
+                {storeOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+                <option value="__custom__">✏️ 직접 입력...</option>
+              </select>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  value={store} onChange={(e) => setStore(e.target.value)}
+                  placeholder="매장명 직접 입력" autoFocus style={{ flex: 1 }}
+                />
+                <button
+                  type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: "0 10px", flexShrink: 0 }}
+                  onClick={() => { setCustomStore(false); setStore(""); }}
+                >목록</button>
+              </div>
+            )}
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--ink3)", marginTop: 5, minHeight: 17 }}>
               {sinfo.name ? `담당 ${sinfo.owner || "미지정"} · 파트장 ${sinfo.partLead || "미지정"}` : ""}
             </div>

@@ -500,6 +500,49 @@ export function WeeklyView({
         </div>
       </div>
       <div className="weekly-board">
+        {/* 모바일: 요일별 카드 (가로 스크롤 표 대신) */}
+        <div className="wk-mobile">
+          {DAYS_KR.map((d, i) => {
+            const dt = dateOf(i);
+            const dayStr = ymd(dt);
+            const isT = dayStr === todayStr;
+            const dayMembers = members
+              .map((m) => ({
+                member: m,
+                items: tasks.filter((t) => t.assignee === m.name && (t.freq === "일일" || t.due_date === dayStr)),
+              }))
+              .filter((x) => x.items.length);
+            return (
+              <div key={d} className={`wk-day-card ${isT ? "today" : ""}`}>
+                <div className="wk-day-head">
+                  <span className="wk-day-name">{d}</span>
+                  <span className="wk-day-date">{dt.getMonth() + 1}/{dt.getDate()}{isT ? " · 오늘" : ""}</span>
+                </div>
+                <div className="wk-day-routine">📌 {ROUTINES[d]}</div>
+                {dayMembers.length ? dayMembers.map(({ member, items }) => (
+                  <div key={member.name} className="wk-day-member">
+                    <div className="wk-day-member-head">
+                      <Avatar m={member} size="sm" />
+                      <span>{member.name}</span>
+                    </div>
+                    <div className="wk-day-tasks">
+                      {items.map((t) => {
+                        const p = priOf(t.priority);
+                        return (
+                          <div key={t.id} className="wk-task-item" style={{ borderLeftColor: p.color }} onClick={() => onEdit(t)}>
+                            <div className="wt-title">{t.title}</div>
+                            <small>{p.label} · {t.status}</small>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )) : <div className="wk-day-empty">예정된 업무가 없습니다</div>}
+              </div>
+            );
+          })}
+        </div>
+        {/* 데스크톱: 담당자 × 요일 표 */}
         <div className="wk-scroll">
           <div className="wk-table">
             <div className="wk-corner">담당자</div>
