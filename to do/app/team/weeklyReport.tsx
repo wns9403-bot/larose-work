@@ -1,10 +1,11 @@
 /* ═══ 주간회의 점검표 — 롯데 영업관리팀 ═══ */
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Member, Store, WeeklyReport, StorePerf, PartLeadCheck, Vacancy, ActionItem,
   PRIORITIES, ymd, mondayOf, achievementRate, changeRate, defaultWeeklyReport, rid, fmtDateTime,
+  parseEcountRows, aggregateEcount, mergeEcountIntoReport, fmtWon,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -38,6 +39,37 @@ export function WeeklyReportView({
     const next = { ...draft, updated_at: Date.now(), updated_by: me };
     setDraft(next);
     onSave(next);
+  };
+
+  /* ─── 이카운트 매출 업로드 ─── */
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [upInfo, setUpInfo] = useState<string>("");
+  const onUpload = async (file: File) => {
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][];
+      const daily = parseEcountRows(rows);
+      if (!daily.length) {
+        setUpInfo("⚠ 인식된 매출 데이터가 없습니다. 이카운트 [판매현황] 엑셀인지 확인해주세요.");
+        return;
+      }
+      const dates = daily.map((d) => d.date).sort();
+      const aggs = aggregateEcount(daily, weekDate);
+      const sun = new Date(weekDate); sun.setDate(weekDate.getDate() + 6);
+      const hit = aggs.filter((a) => a.weekTotal > 0).length;
+      setDraft((d) => mergeEcountIntoReport(d, aggs));
+      setUpInfo(
+        `✅ ${dates[0]} ~ ${dates[dates.length - 1]} 자료 · 매장 ${aggs.length}곳 · ` +
+        `${ymd(weekDate).slice(5)}~${ymd(sun).slice(5)} 주간 실적 ${hit}곳 반영 (저장 버튼을 눌러 확정)`
+      );
+    } catch (e) {
+      setUpInfo("⚠ 파일을 읽지 못했습니다: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   /* ─── 요약 KPI ─── */
@@ -120,12 +152,24 @@ export function WeeklyReportView({
 
       {/* 1. 핵심매장 주간 실적 */}
       <div className="wr-panel">
-        <div className="dash-section-title">1. 핵심매장 주간 실적 — 달성률 80% 미만은 원인·대응 필수, 목표 임의 하향 금지</div>
+        <div className="wr-section-head">
+          <div className="dash-section-title">1. 핵심매장 주간 실적 — 달성률 80% 미만은 원인·대응 필수, 목표 임의 하향 금지</div>
+          <div className="wr-upload-wrap">
+            <input
+              ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }}
+            />
+            <button className="btn btn-primary wr-upload-btn" onClick={() => fileRef.current?.click()}>
+              📥 이카운트 매출 업로드
+            </button>
+          </div>
+        </div>
+        {upInfo && <div className={`wr-upload-info ${upInfo.startsWith("⚠") ? "err" : ""}`}>{upInfo}</div>}
         <div className="wr-table-wrap">
           <table className="wr-table">
             <thead>
               <tr>
-                <th>매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>달성률</th>
+                <th>매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>당월 누계</th><th>달성률</th>
                 <th>전주대비</th><th>파트장 보고(월)</th><th>원인·대응 (미달 시)</th><th></th>
               </tr>
             </thead>
@@ -137,8 +181,12 @@ export function WeeklyReportView({
                   <tr key={s.id}>
                     <td><input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} /></td>
                     <td className="wr-narrow"><input value={s.grade} onChange={(e) => setStorePerf(s.id, { grade: e.target.value })} placeholder="S/A/B" /></td>
-                    <td className="wr-narrow"><input type="number" value={s.target || ""} onChange={(e) => setStorePerf(s.id, { target: Number(e.target.value) || 0 })} /></td>
-                    <td className="wr-narrow"><input type="number" value={s.actual || ""} onChange={(e) => setStorePerf(s.id, { actual: Number(e.target.value) || 0 })} /></td>
+                    <td className="wr-num"><input type="number" value={s.target || ""} onChange={(e) => setStorePerf(s.id, { target: Number(e.target.value) || 0 })} /></td>
+                    <td className="wr-num"><input type="number" value={s.actual || ""} onChange={(e) => setStorePerf(s.id, { actual: Number(e.target.value) || 0 })} /></td>
+                    <td className="wr-num right">
+                      <span className="wr-month">{s.monthActual ? fmtWon(s.monthActual) : "-"}</span>
+                      {s.weekQty ? <small className="wr-qty">{s.weekQty}개</small> : null}
+                    </td>
                     <td className="wr-narrow"><span className="wr-rate-badge" style={{ color: rc.color, background: rc.bg }}>{rate}%</span></td>
                     <td className="wr-narrow"><input value={s.vsLastWeek} onChange={(e) => setStorePerf(s.id, { vsLastWeek: e.target.value })} placeholder="+/-" /></td>
                     <td className="wr-narrow center"><input type="checkbox" checked={s.partLeadReport} onChange={(e) => setStorePerf(s.id, { partLeadReport: e.target.checked })} /></td>
@@ -153,7 +201,10 @@ export function WeeklyReportView({
             {stores.map((st) => <option key={st.name} value={st.name} />)}
           </datalist>
         </div>
-        <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
+        <div className="wr-row-actions">
+          <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
+          <span className="wr-hint">📥 이카운트 [판매현황] 엑셀을 올리면 선택한 주 기준으로 주간 실적·당월 누계·전주대비가 자동 계산됩니다 (목표는 직접 입력)</span>
+        </div>
       </div>
 
       {/* 2. 주간 숫자 점검 */}

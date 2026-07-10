@@ -60,6 +60,7 @@ export type StorePerf = {
   id: string; store: string; grade: string;
   target: number; actual: number; vsLastWeek: string;
   partLeadReport: boolean; cause: string;
+  monthActual?: number; weekQty?: number;
 };
 export type WeeklyMetric = { key: string; label: string; lastWeek: number; thisWeek: number };
 export type KeyProduct = { key: string; label: string; qty: number; rank: string; action: string };
@@ -333,3 +334,95 @@ export function scoreGrade(s: number) {
   if (s >= 1) return { g: "B", c: "#16a34a", bg: "#f0fdf4" };
   return { g: "C", c: "#94a3b8", bg: "#f1f5f9" };
 }
+
+/* ─── 이카운트 판매현황 엑셀 파싱 ─── */
+export type EcountDaily = { store: string; date: string; qty: number; total: number };
+export type StoreAgg = {
+  store: string; norm: string;
+  weekTotal: number; weekQty: number; prevWeekTotal: number;
+  monthTotal: number; monthQty: number;
+};
+
+/* 콤마·통화 문자열 → 숫자 */
+const toNum = (v: unknown) => Number(String(v ?? "").replace(/[^0-9.-]/g, "")) || 0;
+
+/* 접두/접미·수식어 제거: "롯데백화점 소공본점 팝업 매대" → "소공본점", "롯데 부산 본점" → "부산본점" */
+const stripStore = (s: string) =>
+  String(s || "").replace(/롯데백화점|롯데|백화점|매대|팝업|정규|임시|행사|상설/g, "").replace(/\s+/g, "").trim();
+
+/* 매장명 정규화 (매칭 키): 끝의 '점'까지 제거해 "부산본점"·"부산본" 표기 흡수 → "부산본" */
+export const normStoreName = (s: string) => stripStore(s).replace(/점$/, "");
+
+/* 이카운트 원본 매장명 → 표시용 (점 유지): "롯데백화점 소공본점 팝업 매대" → "롯데 소공본점" */
+export const cleanEcountStore = (s: string) => "롯데 " + stripStore(s);
+
+/* sheet_to_json(header:1) 행 배열 → 일별 매출 */
+export function parseEcountRows(rows: unknown[][]): EcountDaily[] {
+  const out: EcountDaily[] = [];
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    const store = String(r[0] ?? "").trim();
+    const dateRaw = String(r[1] ?? "").trim();
+    if (!store || !dateRaw) continue;                    // 소계(일자 없음)·제목·빈 행 제외
+    if (store === "창고별" || store === "총합계") continue;
+    const m = dateRaw.match(/(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
+    if (!m) continue;                                    // 합계 행 등 날짜 아닌 것 제외
+    const date = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    out.push({ store, date, qty: toNum(r[2]), total: toNum(r[5]) });
+  }
+  return out;
+}
+
+/* 선택 주(월요일 기준)로 집계 — 금주/전주/당월 누계 */
+export function aggregateEcount(daily: EcountDaily[], monday: Date): StoreAgg[] {
+  const sun = new Date(monday); sun.setDate(monday.getDate() + 6);
+  const prevMon = new Date(monday); prevMon.setDate(monday.getDate() - 7);
+  const prevSun = new Date(prevMon); prevSun.setDate(prevMon.getDate() + 6);
+  const wStart = ymd(monday), wEnd = ymd(sun), pStart = ymd(prevMon), pEnd = ymd(prevSun);
+  const monthKey = ymd(monday).slice(0, 7);
+
+  const map = new Map<string, StoreAgg>();
+  for (const d of daily) {
+    const norm = normStoreName(d.store);
+    let a = map.get(norm);
+    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0 }; map.set(norm, a); }
+    if (d.date.slice(0, 7) === monthKey) { a.monthTotal += d.total; a.monthQty += d.qty; }
+    if (d.date >= wStart && d.date <= wEnd) { a.weekTotal += d.total; a.weekQty += d.qty; }
+    if (d.date >= pStart && d.date <= pEnd) { a.prevWeekTotal += d.total; }
+  }
+  return [...map.values()].sort((a, b) => b.weekTotal - a.weekTotal);
+}
+
+/* 전주대비 라벨 */
+export const vsLabel = (prev: number, cur: number) => {
+  if (prev <= 0) return cur > 0 ? "신규" : "";
+  const cr = changeRate(prev, cur);
+  return `${cr > 0 ? "+" : ""}${cr}%`;
+};
+
+/* 집계 결과를 점검표에 병합 — 기존 매장 행은 채우고, 없는 매장은 추가 */
+export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): WeeklyReport {
+  const used = new Set<string>();
+  const filled = r.storePerf.map((row) => {
+    const a = aggs.find((x) => x.norm === normStoreName(row.store));
+    if (!a) return row;
+    used.add(a.norm);
+    return {
+      ...row,
+      actual: a.weekTotal,
+      monthActual: a.monthTotal,
+      weekQty: a.weekQty,
+      vsLastWeek: a.prevWeekTotal > 0 ? vsLabel(a.prevWeekTotal, a.weekTotal) : row.vsLastWeek,
+    };
+  });
+  const extra: StorePerf[] = aggs
+    .filter((a) => !used.has(a.norm) && (a.weekTotal > 0 || a.monthTotal > 0))
+    .map((a) => ({
+      id: rid("sp"), store: cleanEcountStore(a.store), grade: "",
+      target: 0, actual: a.weekTotal, monthActual: a.monthTotal, weekQty: a.weekQty,
+      vsLastWeek: vsLabel(a.prevWeekTotal, a.weekTotal), partLeadReport: false, cause: "",
+    }));
+  return { ...r, storePerf: [...filled, ...extra] };
+}
+
+export const fmtWon = (n: number) => (Number(n) || 0).toLocaleString("ko-KR");
