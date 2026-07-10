@@ -66,12 +66,26 @@ export function TaskCard({
   );
 }
 
-function DashTaskRow({ t, showAssignee, onEdit }: { t: Task; showAssignee: boolean; onEdit: (t: Task) => void }) {
+function DashTaskRow({
+  t, showAssignee, onEdit, onComplete,
+}: {
+  t: Task; showAssignee: boolean; onEdit: (t: Task) => void; onComplete?: (id: string) => void;
+}) {
   const p = priOf(t.priority);
   const due = t.due_date ? ` · ${dueLabel(t.due_date)}` : "";
   const storeText = t.store && t.store !== "-" ? ` · ${t.store}` : "";
+  const done = t.status === "완료";
   return (
     <div className="dash-task-row" onClick={() => onEdit(t)}>
+      {onComplete && (
+        <button
+          className={`row-check ${done ? "checked" : ""}`}
+          title={done ? "완료 취소" : "완료 처리"}
+          onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}
+        >
+          {done ? "✓" : ""}
+        </button>
+      )}
       <div style={{ minWidth: 0 }}>
         <b>{t.title}</b>
         <span>{showAssignee ? `${t.assignee} · ` : ""}{p.label} · {t.status}{due}{storeText}</span>
@@ -197,9 +211,9 @@ function ComparePanel({ stats }: { stats: MemberStat[] }) {
 
 /* ─── ① 업무 현황 대시보드 ─── */
 export function DashboardView({
-  members, tasks, me, onEdit,
+  members, tasks, me, onEdit, onComplete,
 }: {
-  members: Member[]; tasks: Task[]; me: string; onEdit: (t: Task) => void;
+  members: Member[]; tasks: Task[]; me: string; onEdit: (t: Task) => void; onComplete: (id: string) => void;
 }) {
   const isLeader = me === members[0]?.name;
   const f = isLeader ? tasks : tasks.filter((t) => t.assignee === me);
@@ -261,7 +275,7 @@ export function DashboardView({
             <div className="dash-section-title">오늘 바로 볼 업무</div>
             <div className="dash-task-rows">
               {today.length
-                ? today.slice(0, 6).map((t) => <DashTaskRow key={t.id} t={t} showAssignee={false} onEdit={onEdit} />)
+                ? today.slice(0, 6).map((t) => <DashTaskRow key={t.id} t={t} showAssignee={false} onEdit={onEdit} onComplete={onComplete} />)
                 : <div className="dash-task-empty">오늘 표시할 업무가 없습니다.</div>}
             </div>
           </div>
@@ -269,7 +283,7 @@ export function DashboardView({
             <div className="dash-section-title">우선 확인할 업무</div>
             <div className="dash-task-rows">
               {focus.length
-                ? focus.map((t) => <DashTaskRow key={t.id} t={t} showAssignee={false} onEdit={onEdit} />)
+                ? focus.map((t) => <DashTaskRow key={t.id} t={t} showAssignee={false} onEdit={onEdit} onComplete={onComplete} />)
                 : <div className="dash-task-empty">확인 필요한 미완료 업무가 없습니다.</div>}
             </div>
           </div>
@@ -314,7 +328,7 @@ export function DashboardView({
         <div className="dash-attention">
           <div className="dash-section-title">🚨 즉시 확인 필요 업무 (긴급·지연)</div>
           <div className="dash-task-rows">
-            {attention.map((t) => <DashTaskRow key={t.id} t={t} showAssignee onEdit={onEdit} />)}
+            {attention.map((t) => <DashTaskRow key={t.id} t={t} showAssignee onEdit={onEdit} onComplete={onComplete} />)}
           </div>
         </div>
       )}
@@ -479,10 +493,10 @@ export function DailyView({
 
 /* ─── ④ 주간 업무 ─── */
 export function WeeklyView({
-  members, tasks, viewDate, setViewDate, onEdit,
+  members, tasks, viewDate, setViewDate, onEdit, onComplete,
 }: {
   members: Member[]; tasks: Task[];
-  viewDate: Date; setViewDate: (d: Date) => void; onEdit: (t: Task) => void;
+  viewDate: Date; setViewDate: (d: Date) => void; onEdit: (t: Task) => void; onComplete: (id: string) => void;
 }) {
   const base = new Date(viewDate);
   const dow = (base.getDay() + 6) % 7;
@@ -533,10 +547,20 @@ export function WeeklyView({
                     <div className="wk-day-tasks">
                       {items.map((t) => {
                         const p = priOf(t.priority);
+                        const done = t.status === "완료";
                         return (
                           <div key={t.id} className="wk-task-item" style={{ borderLeftColor: p.color }} onClick={() => onEdit(t)}>
-                            <div className="wt-title">{t.title}</div>
-                            <small>{p.label} · {t.status}</small>
+                            <button
+                              className={`row-check ${done ? "checked" : ""}`}
+                              title={done ? "완료 취소" : "완료 처리"}
+                              onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}
+                            >
+                              {done ? "✓" : ""}
+                            </button>
+                            <div style={{ minWidth: 0 }}>
+                              <div className="wt-title">{t.title}</div>
+                              <small>{p.label} · {t.status}</small>
+                            </div>
                           </div>
                         );
                       })}
@@ -582,10 +606,20 @@ export function WeeklyView({
                     <div key={`${m.name}-${d}`} className={`wk-cell ${isT ? "today-col" : ""}`}>
                       {items.map((t) => {
                         const p = priOf(t.priority);
+                        const done = t.status === "완료";
                         return (
                           <div key={t.id} className="wk-task-item" style={{ borderLeftColor: p.color }} onClick={() => onEdit(t)}>
-                            <div className="wt-title">{t.title}</div>
-                            <small>{p.label} · {t.status}</small>
+                            <button
+                              className={`row-check ${done ? "checked" : ""}`}
+                              title={done ? "완료 취소" : "완료 처리"}
+                              onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}
+                            >
+                              {done ? "✓" : ""}
+                            </button>
+                            <div style={{ minWidth: 0 }}>
+                              <div className="wt-title">{t.title}</div>
+                              <small>{p.label} · {t.status}</small>
+                            </div>
                           </div>
                         );
                       })}

@@ -174,6 +174,20 @@ export default function TeamBoard() {
     });
     commitTasks(next, `업무 상태를 '${status}'로 변경했습니다`, title);
   };
+  const completeTask = (id: string) => {
+    const target = tasks.find((t) => t.id === id);
+    if (!target) return;
+    const toComplete = target.status !== "완료";
+    const next = tasks.map((t) => {
+      if (t.id !== id) return t;
+      return {
+        ...t, status: toComplete ? "완료" : "대기",
+        progress: toComplete ? 100 : 0,
+        rechecked: false, updated_at: Date.now(), updated_by: me || undefined,
+      };
+    });
+    commitTasks(next, toComplete ? "업무를 완료 처리했습니다" : "완료 처리를 취소했습니다", target.title);
+  };
   const recheckTask = (id: string) => {
     let title = "", now = false;
     const next = tasks.map((t) => {
@@ -420,7 +434,7 @@ export default function TeamBoard() {
 
         <div className="work-area">
           {tab === "dashboard" && (
-            <DashboardView members={members} tasks={filtered} me={me} onEdit={openTask} />
+            <DashboardView members={members} tasks={filtered} me={me} onEdit={openTask} onComplete={completeTask} />
           )}
           {tab === "team" && (
             <TeamDetailView members={members} tasks={filtered} onEdit={openTask} />
@@ -432,7 +446,7 @@ export default function TeamBoard() {
           )}
           {tab === "weekly" && (
             <WeeklyView members={members} tasks={filtered}
-              viewDate={viewDate} setViewDate={setViewDate} onEdit={openTask} />
+              viewDate={viewDate} setViewDate={setViewDate} onEdit={openTask} onComplete={completeTask} />
           )}
           {tab === "monthly" && (
             <MonthlyView members={members} tasks={filtered}
