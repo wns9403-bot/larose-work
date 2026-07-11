@@ -359,21 +359,50 @@ export const normStoreName = (s: string) => stripStore(s).replace(/점$/, "");
 /* 이카운트 원본 매장명 → 표시용 (점 유지): "롯데백화점 소공본점 팝업 매대" → "롯데 소공본점" */
 export const cleanEcountStore = (s: string) => "롯데 " + stripStore(s);
 
-/* sheet_to_json(header:1) 행 배열 → 일별 매출 */
-export function parseEcountRows(rows: unknown[][]): EcountDaily[] {
-  const out: EcountDaily[] = [];
-  for (const r of rows) {
+const isSubtotal = (s: string) => /계\s*$/.test(s) || s === "총합계";
+
+/* 이카운트 export는 선택한 그룹에 따라 컬럼 구성이 바뀜(일별만/품목별만/일별+품목별 등).
+   헤더 행을 읽어 컬럼 위치를 이름으로 매핑한 뒤 일별·품목 데이터를 함께 추출한다. */
+export type EcountSheet = { daily: EcountDaily[]; items: EcountItem[]; hasDaily: boolean; hasItems: boolean };
+export function parseEcountSheet(rows: unknown[][]): EcountSheet {
+  const daily: EcountDaily[] = [];
+  const items: EcountItem[] = [];
+  let headerIdx = -1, cStore = -1, cDate = -1, cItem = -1, cQty = -1, cTotal = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
     if (!Array.isArray(r)) continue;
-    const store = String(r[0] ?? "").trim();
-    const dateRaw = String(r[1] ?? "").trim();
-    if (!store || !dateRaw) continue;                    // 소계(일자 없음)·제목·빈 행 제외
-    if (store === "창고별" || store === "총합계") continue;
-    const m = dateRaw.match(/(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
-    if (!m) continue;                                    // 합계 행 등 날짜 아닌 것 제외
-    const date = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-    out.push({ store, date, qty: toNum(r[2]), total: toNum(r[5]) });
+    const cells = r.map((c) => String(c ?? "").trim());
+    const si = cells.indexOf("창고별");
+    if (si < 0) continue;
+    headerIdx = i; cStore = si;
+    cDate = cells.findIndex((c) => c === "일별");
+    cItem = cells.findIndex((c) => c.includes("품목"));
+    cQty = cells.findIndex((c) => c === "수량");
+    cTotal = cells.findIndex((c) => c === "합계");
+    break;
   }
-  return out;
+  const hasDaily = cDate >= 0, hasItems = cItem >= 0;
+  if (headerIdx < 0 || cTotal < 0) return { daily, items, hasDaily, hasItems };
+
+  let store = "";
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!Array.isArray(r)) continue;
+    const c0 = String(r[cStore] ?? "").trim();
+    if (c0.includes("회사명")) continue;
+    if (c0 && isSubtotal(c0)) continue;                  // "…매대 계"·"총합계"
+    if (c0) store = c0;                                  // 창고(매장) — 반복/그룹헤더 모두 대응
+    if (!store) continue;
+    const qty = toNum(r[cQty]), total = toNum(r[cTotal]);
+    const itemRaw = cItem >= 0 ? String(r[cItem] ?? "").trim() : "";
+    const dateRaw = cDate >= 0 ? String(r[cDate] ?? "").trim() : "";
+    const dm = dateRaw.match(/(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
+    const date = dm ? `${dm[1]}-${dm[2].padStart(2, "0")}-${dm[3].padStart(2, "0")}` : "";
+    if (hasItems && itemRaw) items.push({ store, name: itemRaw, qty, total });
+    // 품목 컬럼이 없는 순수 일별 파일만 매출 추이로 사용 (품목 파일이 주간 매출을 덮어쓰지 않도록)
+    if (!hasItems && date) daily.push({ store, date, qty, total });
+  }
+  return { daily, items, hasDaily, hasItems };
 }
 
 /* 선택 주(월요일 기준)로 집계 — 금주/전주/당월 누계 */
@@ -430,48 +459,8 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
 
 export const fmtWon = (n: number) => (Number(n) || 0).toLocaleString("ko-KR");
 
-/* ─── 이카운트 품목별 판매현황 파싱 ─── */
+/* ─── 이카운트 품목별 판매현황 ─── */
 export type EcountItem = { store: string; name: string; qty: number; total: number };
-
-/* 헤더 행(col0==="창고별")의 col1로 파일 종류 판별: "일별" → 매출, "품목별" → 품목 */
-export function detectEcountType(rows: unknown[][]): "daily" | "items" | "unknown" {
-  for (const r of rows) {
-    if (!Array.isArray(r)) continue;
-    if (String(r[0] ?? "").trim() === "창고별") {
-      const c1 = String(r[1] ?? "").trim();
-      if (c1.includes("품목")) return "items";
-      if (c1.includes("일")) return "daily";
-    }
-  }
-  // 헤더를 못 찾으면 데이터 첫 행의 col1이 날짜면 매출, 아니면 품목
-  for (const r of rows) {
-    if (!Array.isArray(r)) continue;
-    const c0 = String(r[0] ?? "").trim(), c1 = String(r[1] ?? "").trim();
-    if (!c0 || c0 === "창고별" || c0.includes("회사명") || c1 === "") continue;
-    return /\d{4}[/.-]\d{1,2}[/.-]\d{1,2}/.test(c1) ? "daily" : "items";
-  }
-  return "unknown";
-}
-
-const isSubtotal = (s: string) => /계\s*$/.test(s) || s === "총합계";
-
-/* 창고별>품목별 레이아웃 파싱 — 창고(col0)는 그룹 헤더/반복 모두 대응, 품목은 col1 */
-export function parseEcountItemRows(rows: unknown[][]): EcountItem[] {
-  const out: EcountItem[] = [];
-  let store = "";
-  for (const r of rows) {
-    if (!Array.isArray(r)) continue;
-    const c0 = String(r[0] ?? "").trim();
-    const c1 = String(r[1] ?? "").trim();
-    if (c0 === "창고별" || c0.includes("회사명")) continue;   // 헤더·제목
-    if (c0 && isSubtotal(c0)) continue;                        // "…매대 계"·"총합계"
-    if (c0) store = c0;                                        // 창고(매장) 갱신
-    if (!c1) continue;                                         // 품목명 없으면 그룹 헤더 행
-    if (!store) continue;
-    out.push({ store, name: c1, qty: toNum(r[2]), total: toNum(r[5]) });
-  }
-  return out;
-}
 
 /* 매장별 품목 집계 → 매장(norm) → {표시명, 판매액 상위 품목} */
 export type StoreItemGroup = { store: string; items: StoreItem[] };

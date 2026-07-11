@@ -6,8 +6,8 @@ import {
   Member, Store, WeeklyReport, StorePerf, PartLeadCheck, Vacancy, ActionItem,
   StoreItem,
   PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, defaultWeeklyReport, rid, fmtDateTime,
-  parseEcountRows, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
-  detectEcountType, parseEcountItemRows, aggregateItems, mergeItemsIntoReport,
+  parseEcountSheet, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
+  aggregateItems, mergeItemsIntoReport,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -58,10 +58,9 @@ export function WeeklyReportView({
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][];
-      const kind = detectEcountType(rows);
+      const { daily, items, hasItems } = parseEcountSheet(rows);
 
-      if (kind === "items") {
-        const items = parseEcountItemRows(rows);
+      if (hasItems) {
         if (!items.length) { setUpInfo("⚠ 품목 데이터를 인식하지 못했습니다. 이카운트 [품목별 판매현황] 엑셀인지 확인해주세요."); return; }
         const itemMap = aggregateItems(items);
         setDraft((d) => mergeItemsIntoReport(d, itemMap));
@@ -69,7 +68,6 @@ export function WeeklyReportView({
         return;
       }
 
-      const daily = parseEcountRows(rows);
       if (!daily.length) {
         setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 엑셀(일별 또는 품목별)인지 확인해주세요.");
         return;
