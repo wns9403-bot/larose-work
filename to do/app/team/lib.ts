@@ -56,11 +56,14 @@ export type Activity = {
 };
 
 /* ─── 주간회의 점검표 ─── */
+export type StoreItem = { name: string; qty: number; total: number };
 export type StorePerf = {
   id: string; store: string; grade: string;
   target: number; actual: number; vsLastWeek: string;
   partLeadReport: boolean; cause: string;
   monthActual?: number; weekQty?: number;
+  headcount?: number;        // 인당 매출 계산용 (수기 입력)
+  items?: StoreItem[];       // 품목별 판매 TOP (품목별 엑셀 업로드 시)
 };
 export type WeeklyMetric = { key: string; label: string; lastWeek: number; thisWeek: number };
 export type KeyProduct = { key: string; label: string; qty: number; rank: string; action: string };
@@ -426,3 +429,85 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
 }
 
 export const fmtWon = (n: number) => (Number(n) || 0).toLocaleString("ko-KR");
+
+/* ─── 이카운트 품목별 판매현황 파싱 ─── */
+export type EcountItem = { store: string; name: string; qty: number; total: number };
+
+/* 헤더 행(col0==="창고별")의 col1로 파일 종류 판별: "일별" → 매출, "품목별" → 품목 */
+export function detectEcountType(rows: unknown[][]): "daily" | "items" | "unknown" {
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    if (String(r[0] ?? "").trim() === "창고별") {
+      const c1 = String(r[1] ?? "").trim();
+      if (c1.includes("품목")) return "items";
+      if (c1.includes("일")) return "daily";
+    }
+  }
+  // 헤더를 못 찾으면 데이터 첫 행의 col1이 날짜면 매출, 아니면 품목
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    const c0 = String(r[0] ?? "").trim(), c1 = String(r[1] ?? "").trim();
+    if (!c0 || c0 === "창고별" || c0.includes("회사명") || c1 === "") continue;
+    return /\d{4}[/.-]\d{1,2}[/.-]\d{1,2}/.test(c1) ? "daily" : "items";
+  }
+  return "unknown";
+}
+
+const isSubtotal = (s: string) => /계\s*$/.test(s) || s === "총합계";
+
+/* 창고별>품목별 레이아웃 파싱 — 창고(col0)는 그룹 헤더/반복 모두 대응, 품목은 col1 */
+export function parseEcountItemRows(rows: unknown[][]): EcountItem[] {
+  const out: EcountItem[] = [];
+  let store = "";
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    const c0 = String(r[0] ?? "").trim();
+    const c1 = String(r[1] ?? "").trim();
+    if (c0 === "창고별" || c0.includes("회사명")) continue;   // 헤더·제목
+    if (c0 && isSubtotal(c0)) continue;                        // "…매대 계"·"총합계"
+    if (c0) store = c0;                                        // 창고(매장) 갱신
+    if (!c1) continue;                                         // 품목명 없으면 그룹 헤더 행
+    if (!store) continue;
+    out.push({ store, name: c1, qty: toNum(r[2]), total: toNum(r[5]) });
+  }
+  return out;
+}
+
+/* 매장별 품목 집계 → 매장(norm) → {표시명, 판매액 상위 품목} */
+export type StoreItemGroup = { store: string; items: StoreItem[] };
+export function aggregateItems(items: EcountItem[], topN = 6): Map<string, StoreItemGroup> {
+  const byStore = new Map<string, { store: string; m: Map<string, StoreItem> }>();
+  for (const it of items) {
+    const norm = normStoreName(it.store);
+    let g = byStore.get(norm);
+    if (!g) { g = { store: it.store, m: new Map() }; byStore.set(norm, g); }
+    const cur = g.m.get(it.name) || { name: it.name, qty: 0, total: 0 };
+    cur.qty += it.qty; cur.total += it.total;
+    g.m.set(it.name, cur);
+  }
+  const out = new Map<string, StoreItemGroup>();
+  for (const [norm, g] of byStore) {
+    out.set(norm, { store: g.store, items: [...g.m.values()].sort((a, b) => b.total - a.total).slice(0, topN) });
+  }
+  return out;
+}
+
+/* 품목 집계를 점검표에 병합 — 매장 행에 items[] 부착, 없는 매장은 새 행 추가 */
+export function mergeItemsIntoReport(r: WeeklyReport, itemMap: Map<string, StoreItemGroup>): WeeklyReport {
+  const used = new Set<string>();
+  const filled = r.storePerf.map((row) => {
+    const g = itemMap.get(normStoreName(row.store));
+    if (!g) return row;
+    used.add(normStoreName(row.store));
+    return { ...row, items: g.items };
+  });
+  const extra: StorePerf[] = [];
+  for (const [norm, g] of itemMap) {
+    if (used.has(norm)) continue;
+    extra.push({
+      id: rid("sp"), store: cleanEcountStore(g.store), grade: "",
+      target: 0, actual: 0, partLeadReport: false, cause: "", vsLastWeek: "", items: g.items,
+    });
+  }
+  return { ...r, storePerf: [...filled, ...extra] };
+}

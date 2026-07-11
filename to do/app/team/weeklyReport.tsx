@@ -4,8 +4,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Member, Store, WeeklyReport, StorePerf, PartLeadCheck, Vacancy, ActionItem,
-  PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, changeRate, defaultWeeklyReport, rid, fmtDateTime,
+  StoreItem,
+  PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, defaultWeeklyReport, rid, fmtDateTime,
   parseEcountRows, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
+  detectEcountType, parseEcountItemRows, aggregateItems, mergeItemsIntoReport,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -41,10 +43,14 @@ export function WeeklyReportView({
     onSave(next);
   };
 
-  /* ─── 이카운트 매출 업로드 ─── */
+  /* ─── 이카운트 업로드 (일별 매출 · 품목별 자동 판별) ─── */
   const fileRef = useRef<HTMLInputElement>(null);
   const [upInfo, setUpInfo] = useState<string>("");
   const [showAllStores, setShowAllStores] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) =>
+    setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
   const onUpload = async (file: File) => {
     try {
       const XLSX = await import("xlsx");
@@ -52,9 +58,20 @@ export function WeeklyReportView({
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][];
+      const kind = detectEcountType(rows);
+
+      if (kind === "items") {
+        const items = parseEcountItemRows(rows);
+        if (!items.length) { setUpInfo("⚠ 품목 데이터를 인식하지 못했습니다. 이카운트 [품목별 판매현황] 엑셀인지 확인해주세요."); return; }
+        const itemMap = aggregateItems(items);
+        setDraft((d) => mergeItemsIntoReport(d, itemMap));
+        setUpInfo(`✅ 품목별 자료 반영 · 매장 ${itemMap.size}곳 · 품목 ${new Set(items.map((i) => i.name)).size}종 (매장을 펼쳐 확인 · 저장 버튼을 눌러 확정)`);
+        return;
+      }
+
       const daily = parseEcountRows(rows);
       if (!daily.length) {
-        setUpInfo("⚠ 인식된 매출 데이터가 없습니다. 이카운트 [판매현황] 엑셀인지 확인해주세요.");
+        setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 엑셀(일별 또는 품목별)인지 확인해주세요.");
         return;
       }
       const dates = daily.map((d) => d.date).sort();
@@ -63,7 +80,7 @@ export function WeeklyReportView({
       const hit = aggs.filter((a) => a.weekTotal > 0).length;
       setDraft((d) => mergeEcountIntoReport(d, aggs));
       setUpInfo(
-        `✅ ${dates[0]} ~ ${dates[dates.length - 1]} 자료 · 매장 ${aggs.length}곳 · ` +
+        `✅ 일별 매출 ${dates[0]} ~ ${dates[dates.length - 1]} · 매장 ${aggs.length}곳 · ` +
         `${ymd(weekDate).slice(5)}~${ymd(sun).slice(5)} 주간 실적 ${hit}곳 반영 (저장 버튼을 눌러 확정)`
       );
     } catch (e) {
@@ -86,6 +103,9 @@ export function WeeklyReportView({
     setDraft((d) => ({ ...d, storePerf: d.storePerf.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const addStorePerf = () =>
     setDraft((d) => ({ ...d, storePerf: [...d.storePerf, { id: rid("sp"), store: "", grade: "", target: 0, actual: 0, vsLastWeek: "", partLeadReport: false, cause: "" }] }));
+  /* 객단가 = 주간 매출 ÷ 판매 수량, 인당 매출 = 주간 매출 ÷ 인원수 */
+  const perUnit = (s: StorePerf) => (s.weekQty ? Math.round(s.actual / s.weekQty) : 0);
+  const perHead = (s: StorePerf) => (s.headcount ? Math.round(s.actual / s.headcount) : 0);
   const removeStorePerf = (id: string) =>
     setDraft((d) => ({ ...d, storePerf: d.storePerf.filter((s) => s.id !== id) }));
 
@@ -151,25 +171,26 @@ export function WeeklyReportView({
         </div>
       </div>
 
-      {/* 1. 핵심매장 주간 실적 */}
+      {/* 1. 매장별 실적 & 숫자 점검 (통합) */}
       <div className="wr-panel">
         <div className="wr-section-head">
-          <div className="dash-section-title">1. 핵심매장 주간 실적 — 달성률 80% 미만은 원인·대응 필수, 목표 임의 하향 금지</div>
+          <div className="dash-section-title">1. 매장별 실적 &amp; 숫자 점검 — 달성률 80% 미만은 원인·대응 필수 · 매장을 펼치면 숫자 점검·품목별 판매</div>
           <div className="wr-upload-wrap">
             <input
               ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }}
             />
             <button className="btn btn-primary wr-upload-btn" onClick={() => fileRef.current?.click()}>
-              📥 이카운트 매출 업로드
+              📥 이카운트 업로드 (매출·품목)
             </button>
           </div>
         </div>
         {upInfo && <div className={`wr-upload-info ${upInfo.startsWith("⚠") ? "err" : ""}`}>{upInfo}</div>}
         <div className="wr-table-wrap">
-          <table className="wr-table">
+          <table className="wr-table wr-store-table">
             <thead>
               <tr>
+                <th className="wr-exp-th"></th>
                 <th>매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>당월 누계</th><th>달성률</th>
                 <th>전주대비</th><th>파트장 보고(월)</th><th>원인·대응 (미달 시)</th><th></th>
               </tr>
@@ -179,11 +200,15 @@ export function WeeklyReportView({
                 const coreNorms = new Set(CORE_STORES.map(normStoreName));
                 const rows = draft.storePerf.map((s) => ({ s, core: coreNorms.has(normStoreName(s.store)) }));
                 const restCount = rows.filter((r) => !r.core).length;
-                const renderRow = (s: StorePerf, core: boolean) => {
+                const COLS = 11;
+                const renderRows = (s: StorePerf, core: boolean) => {
                   const rate = achievementRate(s.target, s.actual);
                   const rc = rateColor(rate);
-                  return (
+                  const open = expanded.has(s.id);
+                  const down = s.vsLastWeek.trim().startsWith("-");
+                  const els: React.ReactNode[] = [
                     <tr key={s.id} className={core ? "wr-core-row" : ""}>
+                      <td className="wr-exp-td"><button className="wr-exp-btn" onClick={() => toggleExpand(s.id)}>{open ? "▾" : "▸"}</button></td>
                       <td>
                         {core && <span className="wr-core-tag">핵심</span>}
                         <input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} />
@@ -200,15 +225,57 @@ export function WeeklyReportView({
                       <td className="wr-narrow center"><input type="checkbox" checked={s.partLeadReport} onChange={(e) => setStorePerf(s.id, { partLeadReport: e.target.checked })} /></td>
                       <td><input value={s.cause} onChange={(e) => setStorePerf(s.id, { cause: e.target.value })} /></td>
                       <td className="wr-narrow"><button className="wr-del" onClick={() => removeStorePerf(s.id)}>✕</button></td>
-                    </tr>
-                  );
+                    </tr>,
+                  ];
+                  if (open) {
+                    els.push(
+                      <tr key={s.id + "_d"} className="wr-detail-row">
+                        <td colSpan={COLS}>
+                          <div className="wr-detail">
+                            <div className="wr-detail-col">
+                              <div className="wr-detail-title">📊 숫자 점검 (전주 대비)</div>
+                              <div className="wr-metric-grid">
+                                <div className="wr-metric"><span>주간 매출</span><b>{fmtWon(s.actual)}</b></div>
+                                <div className="wr-metric"><span>판매 수량</span><b>{(s.weekQty || 0).toLocaleString()}개</b></div>
+                                <div className="wr-metric"><span>객단가</span><b>{perUnit(s) ? fmtWon(perUnit(s)) : "-"}</b></div>
+                                <div className="wr-metric"><span>전주대비</span><b className={down ? "wr-dn" : "wr-up"}>{s.vsLastWeek || "-"}</b></div>
+                                <div className="wr-metric wr-metric-head">
+                                  <span>인당 매출</span>
+                                  <b>{perHead(s) ? fmtWon(perHead(s)) : "-"}</b>
+                                  <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="wr-detail-col">
+                              <div className="wr-detail-title">🏆 품목별 판매 TOP</div>
+                              {s.items && s.items.length ? (
+                                <ol className="wr-item-list">
+                                  {s.items.map((it: StoreItem, idx: number) => (
+                                    <li key={idx}>
+                                      <span className="wr-item-rank">{idx + 1}</span>
+                                      <span className="wr-item-name">{it.name}</span>
+                                      <span className="wr-item-qty">{it.qty.toLocaleString()}개</span>
+                                      <span className="wr-item-total">{fmtWon(it.total)}</span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              ) : (
+                                <div className="wr-item-empty">품목별 엑셀을 업로드하면 이 매장의 상위 품목이 표시됩니다.</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return els;
                 };
                 const out: React.ReactNode[] = [];
-                rows.filter((r) => r.core).forEach((r) => out.push(renderRow(r.s, true)));
+                rows.filter((r) => r.core).forEach((r) => out.push(...renderRows(r.s, true)));
                 if (restCount > 0) {
                   out.push(
                     <tr key="__toggle" className="wr-toggle-row">
-                      <td colSpan={10}>
+                      <td colSpan={COLS}>
                         <button className="wr-toggle-btn" onClick={() => setShowAllStores((v) => !v)}>
                           {showAllStores ? `▲ 그 외 매장 접기` : `▼ 그 외 매장 ${restCount}곳 펼치기`}
                         </button>
@@ -216,7 +283,7 @@ export function WeeklyReportView({
                     </tr>
                   );
                 }
-                if (showAllStores) rows.filter((r) => !r.core).forEach((r) => out.push(renderRow(r.s, false)));
+                if (showAllStores) rows.filter((r) => !r.core).forEach((r) => out.push(...renderRows(r.s, false)));
                 return out;
               })()}
             </tbody>
@@ -227,49 +294,8 @@ export function WeeklyReportView({
         </div>
         <div className="wr-row-actions">
           <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
-          <span className="wr-hint">📥 이카운트 [판매현황] 엑셀을 올리면 선택한 주 기준으로 주간 실적·당월 누계·전주대비가 자동 계산됩니다 (목표는 직접 입력)</span>
+          <span className="wr-hint">📥 <b>일별 매출</b> 엑셀 → 주간 실적·당월 누계·전주대비 / <b>품목별</b> 엑셀 → 매장별 품목 TOP · 파일 종류 자동 인식 (목표·인원은 직접 입력)</span>
         </div>
-      </div>
-
-      {/* 2. 주간 숫자 점검 */}
-      <div className="wr-panel">
-        <div className="dash-section-title">2. 주간 숫자 점검 (전주 대비) — 컨디션·갈등·트래픽은 점검 제외</div>
-        <div className="wr-split">
-          <div className="wr-table-wrap">
-            <table className="wr-table">
-              <thead><tr><th>지표</th><th>전주</th><th>금주</th><th>증감률</th></tr></thead>
-              <tbody>
-                {draft.metrics.map((m, i) => {
-                  const cr = changeRate(m.lastWeek, m.thisWeek);
-                  return (
-                    <tr key={m.key}>
-                      <td>{m.label}</td>
-                      <td className="wr-narrow"><input type="number" value={m.lastWeek || ""} onChange={(e) => setDraft((d) => { const metrics = [...d.metrics]; metrics[i] = { ...metrics[i], lastWeek: Number(e.target.value) || 0 }; return { ...d, metrics }; })} /></td>
-                      <td className="wr-narrow"><input type="number" value={m.thisWeek || ""} onChange={(e) => setDraft((d) => { const metrics = [...d.metrics]; metrics[i] = { ...metrics[i], thisWeek: Number(e.target.value) || 0 }; return { ...d, metrics }; })} /></td>
-                      <td className="wr-narrow"><span className={`wr-rate-badge ${cr >= 0 ? "up" : "down"}`}>{cr > 0 ? "+" : ""}{cr}%</span></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="wr-table-wrap">
-            <table className="wr-table">
-              <thead><tr><th>핵심제품</th><th>주간 판매량</th><th>순위권</th><th>이탈 시 조치</th></tr></thead>
-              <tbody>
-                {draft.products.map((p, i) => (
-                  <tr key={p.key}>
-                    <td>{p.label}</td>
-                    <td className="wr-narrow"><input type="number" value={p.qty || ""} onChange={(e) => setDraft((d) => { const products = [...d.products]; products[i] = { ...products[i], qty: Number(e.target.value) || 0 }; return { ...d, products }; })} /></td>
-                    <td className="wr-narrow"><input value={p.rank} onChange={(e) => setDraft((d) => { const products = [...d.products]; products[i] = { ...products[i], rank: e.target.value }; return { ...d, products }; })} /></td>
-                    <td><input value={p.action} onChange={(e) => setDraft((d) => { const products = [...d.products]; products[i] = { ...products[i], action: e.target.value }; return { ...d, products }; })} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div className="wr-note">※ 순위권 이탈 시 확인: ①고객 제안 ②판매루틴 숙지 ③제품 설명 ④체험→구매 연결 ⑤세트·추가판매 → 교육으로 연결</div>
       </div>
 
       {/* 3. 파트장 보고·이행 체크 */}
