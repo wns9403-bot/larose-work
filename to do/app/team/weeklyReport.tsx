@@ -188,7 +188,7 @@ export function WeeklyReportView({
           <table className="wr-table wr-store-table">
             <thead>
               <tr>
-                <th className="wr-exp-th"></th>
+                <th className="wr-exp-th">상세</th>
                 <th>매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>당월 누계</th><th>달성률</th>
                 <th>전주대비</th><th>파트장 보고(월)</th><th>원인·대응 (미달 시)</th><th></th>
               </tr>
@@ -205,8 +205,14 @@ export function WeeklyReportView({
                   const open = expanded.has(s.id);
                   const down = s.vsLastWeek.trim().startsWith("-");
                   const els: React.ReactNode[] = [
-                    <tr key={s.id} className={core ? "wr-core-row" : ""}>
-                      <td className="wr-exp-td"><button className="wr-exp-btn" onClick={() => toggleExpand(s.id)}>{open ? "▾" : "▸"}</button></td>
+                    <tr key={s.id} className={`${core ? "wr-core-row" : ""} ${open ? "wr-open-row" : ""}`}>
+                      <td className="wr-exp-td">
+                        <button className={`wr-exp-btn ${open ? "open" : ""}`} onClick={() => toggleExpand(s.id)} title="숫자 점검·품목별 판매 펼치기">
+                          <span className="wr-exp-ic">{open ? "▾" : "▸"}</span>
+                          <span className="wr-exp-lbl">품목·숫자</span>
+                          {s.items && s.items.length ? <span className="wr-exp-badge">{s.items.length}</span> : null}
+                        </button>
+                      </td>
                       <td>
                         {core && <span className="wr-core-tag">핵심</span>}
                         <input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} />
@@ -298,7 +304,7 @@ export function WeeklyReportView({
 
       {/* 3. 파트장 보고·이행 체크 */}
       <div className="wr-panel">
-        <div className="dash-section-title">3. 파트장 보고·이행 체크 — 보고 미작성·지시 미이행은 명확한 평가 근거 (1회→피드백 / 2주 연속→경고 / 반복→평가 하향)</div>
+        <div className="dash-section-title">2. 파트장 보고·이행 체크 — 보고 미작성·지시 미이행은 명확한 평가 근거 (1회→피드백 / 2주 연속→경고 / 반복→평가 하향)</div>
         <div className="wr-table-wrap">
           <table className="wr-table">
             <thead>
@@ -324,7 +330,7 @@ export function WeeklyReportView({
 
       {/* 4. 결원·채용 현황 */}
       <div className="wr-panel">
-        <div className="dash-section-title">4. 결원·채용 현황 (7월 내 전원 충원)</div>
+        <div className="dash-section-title">3. 결원·채용 현황 (7월 내 전원 충원)</div>
         <div className="wr-table-wrap">
           <table className="wr-table">
             <thead><tr><th>결원 매장</th><th>결원(명)</th><th>충원 진행상황</th><th>완료 목표일</th><th>특이사항</th><th></th></tr></thead>
@@ -347,7 +353,7 @@ export function WeeklyReportView({
 
       {/* 5. 이번 주 액션아이템 */}
       <div className="wr-panel">
-        <div className="dash-section-title">5. 이번 주 액션아이템 — 🔴긴급(오늘/내일) · 🟡중요(이번주 내) · 🟢정기(루틴) · ⚪보류(월말 재검토)</div>
+        <div className="dash-section-title">4. 이번 주 액션아이템 — 🔴긴급(오늘/내일) · 🟡중요(이번주 내) · 🟢정기(루틴) · ⚪보류(월말 재검토)</div>
         <div className="wr-table-wrap">
           <table className="wr-table">
             <thead><tr><th>완료</th><th>우선순위</th><th>업무 내용</th><th>담당자</th><th>기한</th><th>비고</th><th></th></tr></thead>

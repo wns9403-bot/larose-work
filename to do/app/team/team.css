@@ -737,10 +737,18 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
   font-size:12px;font-weight:800;color:var(--rose-deep);padding:9px 8px;text-align:center}
 .wr-toggle-btn:hover{background:var(--rose-soft)}
 /* 매장 펼치기(숫자 점검·품목) */
-.wr-store-table th.wr-exp-th,.wr-store-table td.wr-exp-td{width:30px;text-align:center;padding-left:4px;padding-right:0}
-.wr-exp-btn{border:none;background:transparent;cursor:pointer;font-size:12px;color:var(--ink3);
-  padding:4px 4px;border-radius:5px;line-height:1}
-.wr-exp-btn:hover{background:var(--rose-soft);color:var(--rose-deep)}
+.wr-store-table th.wr-exp-th{width:96px;text-align:center;font-size:10px}
+.wr-store-table td.wr-exp-td{width:96px;padding:5px 6px}
+.wr-exp-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--rose-mid);
+  background:var(--rose-soft);cursor:pointer;font-size:11px;font-weight:800;color:var(--rose-deep);
+  padding:5px 9px;border-radius:999px;line-height:1;white-space:nowrap}
+.wr-exp-btn:hover{background:var(--rose);color:#fff;border-color:var(--rose)}
+.wr-exp-btn.open{background:var(--rose);color:#fff;border-color:var(--rose)}
+.wr-exp-ic{font-size:10px}
+.wr-exp-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;
+  padding:0 4px;border-radius:999px;background:#fff;color:var(--rose-deep);font-size:10px;font-weight:800}
+.wr-exp-btn.open .wr-exp-badge{background:rgba(255,255,255,.25);color:#fff}
+.wr-open-row td{background:var(--rose-soft)}
 .wr-detail-row td{background:var(--surface2);padding:0!important}
 .wr-detail{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;padding:14px 18px 16px}
 .wr-detail-col{min-width:0}
