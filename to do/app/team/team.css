@@ -728,6 +728,14 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .wr-qty{display:block;font-size:10.5px;color:var(--ink3);font-weight:700;margin-top:1px}
 .wr-row-actions{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
 .wr-hint{font-size:11px;color:var(--ink3);font-weight:600;line-height:1.5}
+/* 핵심매장 표시 + 접기/펼치기 */
+.wr-core-row td{background:var(--rose-soft)}
+.wr-core-tag{display:inline-block;font-size:9.5px;font-weight:800;color:#fff;background:var(--rose);
+  border-radius:5px;padding:1px 5px;margin-right:6px;vertical-align:middle}
+.wr-toggle-row td{padding:0!important;background:var(--surface2);border-bottom:1px solid var(--border2)}
+.wr-toggle-btn{width:100%;border:none;background:transparent;cursor:pointer;
+  font-size:12px;font-weight:800;color:var(--rose-deep);padding:9px 8px;text-align:center}
+.wr-toggle-btn:hover{background:var(--rose-soft)}
 .wr-note{margin-top:10px;font-size:11.5px;color:var(--ink3);font-weight:600;line-height:1.6}
 .wr-row-done td{opacity:.55;text-decoration:line-through}
 .wr-row-done td.wr-narrow{text-decoration:none}

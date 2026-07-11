@@ -4,8 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Member, Store, WeeklyReport, StorePerf, PartLeadCheck, Vacancy, ActionItem,
-  PRIORITIES, ymd, mondayOf, achievementRate, changeRate, defaultWeeklyReport, rid, fmtDateTime,
-  parseEcountRows, aggregateEcount, mergeEcountIntoReport, fmtWon,
+  PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, changeRate, defaultWeeklyReport, rid, fmtDateTime,
+  parseEcountRows, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -44,6 +44,7 @@ export function WeeklyReportView({
   /* ─── 이카운트 매출 업로드 ─── */
   const fileRef = useRef<HTMLInputElement>(null);
   const [upInfo, setUpInfo] = useState<string>("");
+  const [showAllStores, setShowAllStores] = useState(false);
   const onUpload = async (file: File) => {
     try {
       const XLSX = await import("xlsx");
@@ -174,27 +175,50 @@ export function WeeklyReportView({
               </tr>
             </thead>
             <tbody>
-              {draft.storePerf.map((s) => {
-                const rate = achievementRate(s.target, s.actual);
-                const rc = rateColor(rate);
-                return (
-                  <tr key={s.id}>
-                    <td><input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} /></td>
-                    <td className="wr-narrow"><input value={s.grade} onChange={(e) => setStorePerf(s.id, { grade: e.target.value })} placeholder="S/A/B" /></td>
-                    <td className="wr-num"><input type="number" value={s.target || ""} onChange={(e) => setStorePerf(s.id, { target: Number(e.target.value) || 0 })} /></td>
-                    <td className="wr-num"><input type="number" value={s.actual || ""} onChange={(e) => setStorePerf(s.id, { actual: Number(e.target.value) || 0 })} /></td>
-                    <td className="wr-num right">
-                      <span className="wr-month">{s.monthActual ? fmtWon(s.monthActual) : "-"}</span>
-                      {s.weekQty ? <small className="wr-qty">{s.weekQty}개</small> : null}
-                    </td>
-                    <td className="wr-narrow"><span className="wr-rate-badge" style={{ color: rc.color, background: rc.bg }}>{rate}%</span></td>
-                    <td className="wr-narrow"><input value={s.vsLastWeek} onChange={(e) => setStorePerf(s.id, { vsLastWeek: e.target.value })} placeholder="+/-" /></td>
-                    <td className="wr-narrow center"><input type="checkbox" checked={s.partLeadReport} onChange={(e) => setStorePerf(s.id, { partLeadReport: e.target.checked })} /></td>
-                    <td><input value={s.cause} onChange={(e) => setStorePerf(s.id, { cause: e.target.value })} /></td>
-                    <td className="wr-narrow"><button className="wr-del" onClick={() => removeStorePerf(s.id)}>✕</button></td>
-                  </tr>
-                );
-              })}
+              {(() => {
+                const coreNorms = new Set(CORE_STORES.map(normStoreName));
+                const rows = draft.storePerf.map((s) => ({ s, core: coreNorms.has(normStoreName(s.store)) }));
+                const restCount = rows.filter((r) => !r.core).length;
+                const renderRow = (s: StorePerf, core: boolean) => {
+                  const rate = achievementRate(s.target, s.actual);
+                  const rc = rateColor(rate);
+                  return (
+                    <tr key={s.id} className={core ? "wr-core-row" : ""}>
+                      <td>
+                        {core && <span className="wr-core-tag">핵심</span>}
+                        <input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} />
+                      </td>
+                      <td className="wr-narrow"><input value={s.grade} onChange={(e) => setStorePerf(s.id, { grade: e.target.value })} placeholder="S/A/B" /></td>
+                      <td className="wr-num"><input type="number" value={s.target || ""} onChange={(e) => setStorePerf(s.id, { target: Number(e.target.value) || 0 })} /></td>
+                      <td className="wr-num"><input type="number" value={s.actual || ""} onChange={(e) => setStorePerf(s.id, { actual: Number(e.target.value) || 0 })} /></td>
+                      <td className="wr-num right">
+                        <span className="wr-month">{s.monthActual ? fmtWon(s.monthActual) : "-"}</span>
+                        {s.weekQty ? <small className="wr-qty">{s.weekQty}개</small> : null}
+                      </td>
+                      <td className="wr-narrow"><span className="wr-rate-badge" style={{ color: rc.color, background: rc.bg }}>{rate}%</span></td>
+                      <td className="wr-narrow"><input value={s.vsLastWeek} onChange={(e) => setStorePerf(s.id, { vsLastWeek: e.target.value })} placeholder="+/-" /></td>
+                      <td className="wr-narrow center"><input type="checkbox" checked={s.partLeadReport} onChange={(e) => setStorePerf(s.id, { partLeadReport: e.target.checked })} /></td>
+                      <td><input value={s.cause} onChange={(e) => setStorePerf(s.id, { cause: e.target.value })} /></td>
+                      <td className="wr-narrow"><button className="wr-del" onClick={() => removeStorePerf(s.id)}>✕</button></td>
+                    </tr>
+                  );
+                };
+                const out: React.ReactNode[] = [];
+                rows.filter((r) => r.core).forEach((r) => out.push(renderRow(r.s, true)));
+                if (restCount > 0) {
+                  out.push(
+                    <tr key="__toggle" className="wr-toggle-row">
+                      <td colSpan={10}>
+                        <button className="wr-toggle-btn" onClick={() => setShowAllStores((v) => !v)}>
+                          {showAllStores ? `▲ 그 외 매장 접기` : `▼ 그 외 매장 ${restCount}곳 펼치기`}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+                if (showAllStores) rows.filter((r) => !r.core).forEach((r) => out.push(renderRow(r.s, false)));
+                return out;
+              })()}
             </tbody>
           </table>
           <datalist id="wr-store-names">
