@@ -88,7 +88,7 @@ export function WeeklyReportView({
   };
 
   /* ─── 요약 KPI ─── */
-  const rates = draft.storePerf.map((s) => achievementRate(s.target, s.actual));
+  const rates = draft.storePerf.map((s) => achievementRate(s.target, s.monthActual || 0));
   const avgRate = rates.length ? Math.round(rates.reduce((a, b) => a + b, 0) / rates.length) : 0;
   const belowCount = rates.filter((r) => r < 80 && r > 0).length;
   const doneItems = draft.actionItems.filter((a) => a.done).length;
@@ -188,7 +188,7 @@ export function WeeklyReportView({
             <thead>
               <tr>
                 <th className="wr-exp-th">상세</th>
-                <th className="wr-store-th">매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>전월 누계</th><th>당월 누계</th><th>달성률</th>
+                <th className="wr-store-th">매장</th><th>등급</th><th>월간 목표</th><th>주간 실적</th><th>전월 누계</th><th>당월 누계</th><th>달성률</th>
                 <th>전주대비</th><th>파트장 보고(주간)</th><th>원인·대응 (미달 시)</th><th></th>
               </tr>
             </thead>
@@ -199,7 +199,7 @@ export function WeeklyReportView({
                 const restCount = rows.filter((r) => !r.core).length;
                 const COLS = 12;
                 const renderRows = (s: StorePerf, core: boolean) => {
-                  const rate = achievementRate(s.target, s.actual);
+                  const rate = achievementRate(s.target, s.monthActual || 0);
                   const rc = rateColor(rate);
                   const open = expanded.has(s.id);
                   const down = s.vsLastWeek.trim().startsWith("-");
