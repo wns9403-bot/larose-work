@@ -64,6 +64,10 @@ export type StorePerf = {
   monthActual?: number; prevMonthActual?: number; weekQty?: number;
   headcount?: number;        // 인당 매출 계산용 (수기 입력)
   items?: StoreItem[];       // 품목별 판매 TOP (품목별 엑셀 업로드 시)
+  netSales?: number;         // 순매출 (공급가액)
+  count?: number;            // 판매건수 (전표 수)
+  staff?: string[];          // 근무직원 (스케줄)
+  personDays?: number;       // 주간 연인원 (인당 일매출 분모)
 };
 export type WeeklyMetric = { key: string; label: string; lastWeek: number; thisWeek: number };
 export type KeyProduct = { key: string; label: string; qty: number; rank: string; action: string };
@@ -339,11 +343,12 @@ export function scoreGrade(s: number) {
 }
 
 /* ─── 이카운트 판매현황 엑셀 파싱 ─── */
-export type EcountDaily = { store: string; date: string; qty: number; total: number };
+export type EcountDaily = { store: string; date: string; qty: number; total: number; voucher?: string; supply?: number };
 export type StoreAgg = {
   store: string; norm: string;
   weekTotal: number; weekQty: number; prevWeekTotal: number;
   monthTotal: number; monthQty: number; prevMonthTotal: number;
+  weekNet: number; weekCount: number;   // 순매출(공급가액)·판매건수(전표수)
 };
 
 /* 콤마·통화 문자열 → 숫자 */
@@ -367,7 +372,7 @@ export type EcountSheet = { daily: EcountDaily[]; items: EcountItem[]; hasDaily:
 export function parseEcountSheet(rows: unknown[][]): EcountSheet {
   const daily: EcountDaily[] = [];
   const items: EcountItem[] = [];
-  let headerIdx = -1, cStore = -1, cDate = -1, cItem = -1, cQty = -1, cTotal = -1;
+  let headerIdx = -1, cStore = -1, cDate = -1, cItem = -1, cQty = -1, cTotal = -1, cVoucher = -1, cSupply = -1;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!Array.isArray(r)) continue;
@@ -379,6 +384,8 @@ export function parseEcountSheet(rows: unknown[][]): EcountSheet {
     cItem = cells.findIndex((c) => c.includes("품목"));
     cQty = cells.findIndex((c) => c === "수량");
     cTotal = cells.findIndex((c) => c === "합계");
+    cVoucher = cells.findIndex((c) => c.includes("전표"));
+    cSupply = cells.findIndex((c) => c.includes("공급가"));
     break;
   }
   const hasDaily = cDate >= 0, hasItems = cItem >= 0;
@@ -400,7 +407,11 @@ export function parseEcountSheet(rows: unknown[][]): EcountSheet {
     const date = dm ? `${dm[1]}-${dm[2].padStart(2, "0")}-${dm[3].padStart(2, "0")}` : "";
     if (hasItems && itemRaw) items.push({ store, name: itemRaw, qty, total });
     // 날짜가 있으면 매출 추이로도 사용 (일별+품목별 파일은 매출·품목 둘 다 채움)
-    if (date) daily.push({ store, date, qty, total });
+    if (date) {
+      const voucher = cVoucher >= 0 ? String(r[cVoucher] ?? "").trim() : "";
+      const supply = cSupply >= 0 ? toNum(r[cSupply]) : 0;
+      daily.push({ store, date, qty, total, voucher, supply });
+    }
   }
   return { daily, items, hasDaily, hasItems };
 }
@@ -415,16 +426,21 @@ export function aggregateEcount(daily: EcountDaily[], monday: Date): StoreAgg[] 
   const prevMonthKey = ymd(new Date(monday.getFullYear(), monday.getMonth() - 1, 1)).slice(0, 7);
 
   const map = new Map<string, StoreAgg>();
+  const vouchers = new Map<string, Set<string>>();   // norm → 주간 전표 집합
   for (const d of daily) {
     const norm = normStoreName(d.store);
     let a = map.get(norm);
-    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0, prevMonthTotal: 0 }; map.set(norm, a); }
+    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0, prevMonthTotal: 0, weekNet: 0, weekCount: 0 }; map.set(norm, a); vouchers.set(norm, new Set()); }
     const mk = d.date.slice(0, 7);
     if (mk === monthKey) { a.monthTotal += d.total; a.monthQty += d.qty; }
     if (mk === prevMonthKey) { a.prevMonthTotal += d.total; }
-    if (d.date >= wStart && d.date <= wEnd) { a.weekTotal += d.total; a.weekQty += d.qty; }
+    if (d.date >= wStart && d.date <= wEnd) {
+      a.weekTotal += d.total; a.weekQty += d.qty; a.weekNet += d.supply || 0;
+      if (d.voucher) vouchers.get(norm)!.add(d.date + "|" + d.voucher);
+    }
     if (d.date >= pStart && d.date <= pEnd) { a.prevWeekTotal += d.total; }
   }
+  for (const [norm, set] of vouchers) map.get(norm)!.weekCount = set.size;
   return [...map.values()].sort((a, b) => b.weekTotal - a.weekTotal);
 }
 
@@ -448,6 +464,8 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
       monthActual: a.monthTotal,
       prevMonthActual: a.prevMonthTotal,
       weekQty: a.weekQty,
+      netSales: a.weekNet,
+      count: a.weekCount,
       vsLastWeek: a.prevWeekTotal > 0 ? vsLabel(a.prevWeekTotal, a.weekTotal) : row.vsLastWeek,
     };
   });
@@ -456,6 +474,7 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
     .map((a) => ({
       id: rid("sp"), store: cleanEcountStore(a.store), grade: "",
       target: 0, actual: a.weekTotal, monthActual: a.monthTotal, prevMonthActual: a.prevMonthTotal, weekQty: a.weekQty,
+      netSales: a.weekNet, count: a.weekCount,
       vsLastWeek: vsLabel(a.prevWeekTotal, a.weekTotal), partLeadReport: false, cause: "",
     }));
   return { ...r, storePerf: [...filled, ...extra] };
@@ -504,3 +523,82 @@ export function mergeItemsIntoReport(r: WeeklyReport, itemMap: Map<string, Store
   }
   return { ...r, storePerf: [...filled, ...extra] };
 }
+
+/* ─── 근무 스케줄 엑셀 파싱 (담당자 × 날짜 = 그날 위치) ─── */
+export type ScheduleRec = { date: string; member: string; store: string };
+export type ScheduleAgg = { token: string; norm: string; staff: string[]; personDays: number };
+
+/* 매장 아님(제외): 사무실·연차·휴가·오프 등 */
+const NON_STORE = /사무실|연차|휴가|오프|오전|오후|미정|대기/;
+
+/* 헤더에서 '날짜' 열을 찾아 오른쪽 담당자 열을 매핑, 각 셀의 (위치)를 추출 */
+export function parseScheduleSheet(rows: unknown[][], year: number): ScheduleRec[] {
+  let hIdx = -1, cDate = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (!Array.isArray(rows[i])) continue;
+    const c = rows[i].map((x) => String(x ?? "").trim());
+    const di = c.indexOf("날짜");
+    if (di >= 0) { hIdx = i; cDate = di; break; }
+  }
+  if (hIdx < 0) return [];
+  const header = rows[hIdx].map((x) => String(x ?? "").trim());
+  const members: { name: string; col: number }[] = [];
+  for (let j = cDate + 1; j < header.length; j++) {
+    const nm = header[j];
+    if (!nm) continue;
+    if (nm.includes("설치") || nm.includes("철수") || nm.includes("비고")) break;
+    members.push({ name: nm, col: j });
+  }
+  const recs: ScheduleRec[] = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!Array.isArray(r)) continue;
+    const dm = String(r[cDate] ?? "").trim().match(/(\d{1,2})\.\s*(\d{1,2})\./);
+    if (!dm) continue;
+    const date = `${year}-${dm[1].padStart(2, "0")}-${dm[2].padStart(2, "0")}`;
+    for (const m of members) {
+      const raw = String(r[m.col] ?? "").replace(/[()]/g, "").trim();
+      if (!raw) continue;
+      for (let part of raw.split(",")) {
+        part = part.trim();
+        if (!part || NON_STORE.test(part)) continue;
+        recs.push({ date, member: m.name, store: part });
+      }
+    }
+  }
+  return recs;
+}
+
+/* 선택 주 기준 매장별 근무직원·연인원 */
+export function aggregateSchedule(recs: ScheduleRec[], monday: Date): ScheduleAgg[] {
+  const sun = new Date(monday); sun.setDate(monday.getDate() + 6);
+  const wStart = ymd(monday), wEnd = ymd(sun);
+  const map = new Map<string, { token: string; staff: Set<string>; personDays: number }>();
+  for (const r of recs) {
+    if (r.date < wStart || r.date > wEnd) continue;
+    const norm = normStoreName(r.store);
+    let g = map.get(norm);
+    if (!g) { g = { token: r.store, staff: new Set(), personDays: 0 }; map.set(norm, g); }
+    g.staff.add(r.member);
+    g.personDays += 1;
+  }
+  return [...map.entries()].map(([norm, g]) => ({ norm, token: g.token, staff: [...g.staff], personDays: g.personDays }));
+}
+
+/* 매장명 근사 매칭: "부산"(스케줄) ↔ "부산본"(이카운트) */
+const storeMatch = (a: string, b: string) => a === b || (a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a)));
+
+/* 스케줄 집계를 점검표 매장 행에 병합 (근무직원·연인원) */
+export function mergeScheduleIntoReport(r: WeeklyReport, sched: ScheduleAgg[]): WeeklyReport {
+  const storePerf = r.storePerf.map((row) => {
+    const rn = normStoreName(row.store);
+    const g = sched.find((s) => storeMatch(rn, s.norm));
+    if (!g) return { ...row, staff: [], personDays: 0 };
+    return { ...row, staff: g.staff, personDays: g.personDays };
+  });
+  return { ...r, storePerf };
+}
+
+/* 객단가·인당 일매출 */
+export const aovOf = (s: StorePerf) => (s.count ? Math.round(s.actual / s.count) : 0);
+export const perHeadDailyOf = (s: StorePerf) => (s.personDays ? Math.round(s.actual / s.personDays) : 0);

@@ -8,6 +8,7 @@ import {
   PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, defaultWeeklyReport, rid, fmtDateTime,
   parseEcountSheet, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
   aggregateItems, mergeItemsIntoReport,
+  parseScheduleSheet, aggregateSchedule, mergeScheduleIntoReport, aovOf, perHeadDailyOf,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -61,7 +62,17 @@ export function WeeklyReportView({
       const { daily, items } = parseEcountSheet(rows);
 
       if (!daily.length && !items.length) {
-        setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 엑셀(일별 또는 품목별)인지 확인해주세요.");
+        // 이카운트가 아니면 근무 스케줄로 시도
+        const recs = parseScheduleSheet(rows, weekDate.getFullYear());
+        if (recs.length) {
+          const sched = aggregateSchedule(recs, weekDate);
+          setDraft((d) => mergeScheduleIntoReport(d, sched));
+          const hit = sched.filter((s) => s.staff.length).length;
+          const memCnt = new Set(recs.map((r) => r.member)).size;
+          setUpInfo(`✅ 근무 스케줄 반영 · 담당자 ${memCnt}명 · 근무 잡힌 매장 ${hit}곳 (매장을 펼쳐 근무직원·인당 일매출 확인 · 저장 버튼을 눌러 확정)`);
+          return;
+        }
+        setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 또는 근무 스케줄 엑셀인지 확인해주세요.");
         return;
       }
 
@@ -100,8 +111,7 @@ export function WeeklyReportView({
     setDraft((d) => ({ ...d, storePerf: d.storePerf.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const addStorePerf = () =>
     setDraft((d) => ({ ...d, storePerf: [...d.storePerf, { id: rid("sp"), store: "", grade: "", target: 0, actual: 0, vsLastWeek: "", partLeadReport: false, cause: "" }] }));
-  /* 객단가 = 주간 매출 ÷ 판매 수량, 인당 매출 = 주간 매출 ÷ 인원수 */
-  const perUnit = (s: StorePerf) => (s.weekQty ? Math.round(s.actual / s.weekQty) : 0);
+  /* 인당 매출(수기 인원 입력 폴백) = 주간 매출 ÷ 인원수 */
   const perHead = (s: StorePerf) => (s.headcount ? Math.round(s.actual / s.headcount) : 0);
   const removeStorePerf = (id: string) =>
     setDraft((d) => ({ ...d, storePerf: d.storePerf.filter((s) => s.id !== id) }));
@@ -239,14 +249,22 @@ export function WeeklyReportView({
                             <div className="wr-detail-col">
                               <div className="wr-detail-title">📊 숫자 점검 (전주 대비)</div>
                               <div className="wr-metric-grid">
-                                <div className="wr-metric"><span>주간 매출</span><b>{fmtWon(s.actual)}</b></div>
+                                <div className="wr-metric"><span>매출(합계)</span><b>{fmtWon(s.actual)}</b></div>
+                                <div className="wr-metric"><span>순매출</span><b>{s.netSales ? fmtWon(s.netSales) : "-"}</b></div>
                                 <div className="wr-metric"><span>판매 수량</span><b>{(s.weekQty || 0).toLocaleString()}개</b></div>
-                                <div className="wr-metric"><span>객단가</span><b>{perUnit(s) ? fmtWon(perUnit(s)) : "-"}</b></div>
+                                <div className="wr-metric"><span>판매 건수</span><b>{s.count ? `${s.count.toLocaleString()}건` : "-"}</b></div>
+                                <div className="wr-metric"><span>객단가</span><b>{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</b></div>
                                 <div className="wr-metric"><span>전주대비</span><b className={down ? "wr-dn" : "wr-up"}>{s.vsLastWeek || "-"}</b></div>
                                 <div className="wr-metric wr-metric-head">
-                                  <span>인당 매출</span>
-                                  <b>{perHead(s) ? fmtWon(perHead(s)) : "-"}</b>
-                                  <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>
+                                  <span>인당 일매출</span>
+                                  <b>{s.personDays ? fmtWon(perHeadDailyOf(s)) : (perHead(s) ? fmtWon(perHead(s)) : "-")}</b>
+                                  {s.personDays
+                                    ? <small className="wr-head-note">연인원 {s.personDays}</small>
+                                    : <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>}
+                                </div>
+                                <div className="wr-metric wr-metric-staff">
+                                  <span>근무직원</span>
+                                  <b>{s.staff && s.staff.length ? s.staff.join(", ") : "-"}</b>
                                 </div>
                               </div>
                             </div>
@@ -298,9 +316,66 @@ export function WeeklyReportView({
         </div>
         <div className="wr-row-actions">
           <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
-          <span className="wr-hint">📥 이카운트 엑셀 업로드 → 주간 실적·전월/당월 누계·전주대비·품목 TOP 자동 계산 (주간 실적은 현황 표시 · 목표·인원만 직접 입력)</span>
+          <span className="wr-hint">📥 이카운트(전표별) 엑셀 → 매출·순매출·건수·객단가·품목 / 근무 스케줄 엑셀 → 근무직원·인당 일매출 · 파일 종류 자동 인식 · 매장 펼치면 상세</span>
         </div>
       </div>
+
+      {/* 지점 순위 & 인사이트 */}
+      {(() => {
+        const withSales = draft.storePerf.filter((s) => s.actual > 0);
+        if (!withSales.length) return null;
+        const ranked = [...withSales].sort((a, b) => b.actual - a.actual);
+        const lines: React.ReactNode[] = [];
+        const top = ranked[0];
+        lines.push(<>이번 주 매출 1위는 <b>{top.store}</b> — {fmtWon(top.actual)}.</>);
+        const withAov = withSales.filter((s) => aovOf(s));
+        if (withAov.length >= 2) {
+          const hi = [...withAov].sort((a, b) => aovOf(b) - aovOf(a))[0];
+          const lo = [...withAov].sort((a, b) => aovOf(a) - aovOf(b))[0];
+          if (hi.id !== lo.id) lines.push(<>객단가는 <b>{hi.store}</b> {fmtWon(aovOf(hi))} 최고 / <b>{lo.store}</b> {fmtWon(aovOf(lo))} 최저 — 낮은 곳은 세트·추가판매 점검.</>);
+        }
+        const withHead = withSales.filter((s) => s.personDays);
+        if (withHead.length) {
+          const hi = [...withHead].sort((a, b) => perHeadDailyOf(b) - perHeadDailyOf(a))[0];
+          lines.push(<>인당 일매출 최고는 <b>{hi.store}</b> — {fmtWon(perHeadDailyOf(hi))} ({(hi.staff || []).join("/")}).</>);
+        }
+        const drops = withSales.filter((s) => s.vsLastWeek.startsWith("-") && parseInt(s.vsLastWeek) <= -20);
+        if (drops.length) lines.push(<span>전주 대비 20%↓ 하락: <b style={{ color: "var(--urgent)" }}>{drops.map((d) => `${d.store}(${d.vsLastWeek})`).join(", ")}</b> — 원인 확인 필요.</span>);
+        const conc = withSales.filter((s) => s.items && s.items.length && s.actual)
+          .map((s) => ({ s, pct: Math.round((s.items![0].total / s.actual) * 100), item: s.items![0].name }))
+          .filter((x) => x.pct >= 50).sort((a, b) => b.pct - a.pct);
+        if (conc.length) lines.push(<><b>{conc[0].s.store}</b>는 '{conc[0].item}' 한 품목이 매출의 {conc[0].pct}% — 품목 다변화 검토.</>);
+
+        return (
+          <div className="wr-panel">
+            <div className="dash-section-title">📊 지점 순위 &amp; 인사이트</div>
+            <div className="insight-panel wr-insight">
+              {lines.map((l, i) => <div key={i} className="insight-line">{l}</div>)}
+            </div>
+            <div className="wr-table-wrap">
+              <table className="wr-table wr-rank-table">
+                <thead>
+                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th><th>근무직원</th></tr>
+                </thead>
+                <tbody>
+                  {ranked.map((s, i) => (
+                    <tr key={s.id}>
+                      <td className="wr-narrow center"><span className={`wr-rank ${i < 3 ? "top" : ""}`}>{i + 1}</span></td>
+                      <td>{s.store}</td>
+                      <td className="wr-num right"><b>{fmtWon(s.actual)}</b></td>
+                      <td className="wr-num right">{s.netSales ? fmtWon(s.netSales) : "-"}</td>
+                      <td className="wr-num right">{s.count ? s.count.toLocaleString() : "-"}</td>
+                      <td className="wr-num right">{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</td>
+                      <td className="wr-num right">{s.personDays ? fmtWon(perHeadDailyOf(s)) : "-"}</td>
+                      <td className="wr-staff-cell">{s.staff && s.staff.length ? s.staff.join(", ") : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 3. 파트장 보고·이행 체크 */}
       <div className="wr-panel">
