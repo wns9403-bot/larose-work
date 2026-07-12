@@ -399,8 +399,8 @@ export function parseEcountSheet(rows: unknown[][]): EcountSheet {
     const dm = dateRaw.match(/(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
     const date = dm ? `${dm[1]}-${dm[2].padStart(2, "0")}-${dm[3].padStart(2, "0")}` : "";
     if (hasItems && itemRaw) items.push({ store, name: itemRaw, qty, total });
-    // 품목 컬럼이 없는 순수 일별 파일만 매출 추이로 사용 (품목 파일이 주간 매출을 덮어쓰지 않도록)
-    if (!hasItems && date) daily.push({ store, date, qty, total });
+    // 날짜가 있으면 매출 추이로도 사용 (일별+품목별 파일은 매출·품목 둘 다 채움)
+    if (date) daily.push({ store, date, qty, total });
   }
   return { daily, items, hasDaily, hasItems };
 }

@@ -58,29 +58,28 @@ export function WeeklyReportView({
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][];
-      const { daily, items, hasItems } = parseEcountSheet(rows);
+      const { daily, items } = parseEcountSheet(rows);
 
-      if (hasItems) {
-        if (!items.length) { setUpInfo("⚠ 품목 데이터를 인식하지 못했습니다. 이카운트 [품목별 판매현황] 엑셀인지 확인해주세요."); return; }
-        const itemMap = aggregateItems(items);
-        setDraft((d) => mergeItemsIntoReport(d, itemMap));
-        setUpInfo(`✅ 품목별 자료 반영 · 매장 ${itemMap.size}곳 · 품목 ${new Set(items.map((i) => i.name)).size}종 (매장을 펼쳐 확인 · 저장 버튼을 눌러 확정)`);
-        return;
-      }
-
-      if (!daily.length) {
+      if (!daily.length && !items.length) {
         setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 엑셀(일별 또는 품목별)인지 확인해주세요.");
         return;
       }
-      const dates = daily.map((d) => d.date).sort();
-      const aggs = aggregateEcount(daily, weekDate);
-      const sun = new Date(weekDate); sun.setDate(weekDate.getDate() + 6);
-      const hit = aggs.filter((a) => a.weekTotal > 0).length;
-      setDraft((d) => mergeEcountIntoReport(d, aggs));
-      setUpInfo(
-        `✅ 일별 매출 ${dates[0]} ~ ${dates[dates.length - 1]} · 매장 ${aggs.length}곳 · ` +
-        `${ymd(weekDate).slice(5)}~${ymd(sun).slice(5)} 주간 실적 ${hit}곳 반영 (저장 버튼을 눌러 확정)`
-      );
+
+      const parts: string[] = [];
+      if (daily.length) {
+        const dates = daily.map((d) => d.date).sort();
+        const aggs = aggregateEcount(daily, weekDate);
+        const sun = new Date(weekDate); sun.setDate(weekDate.getDate() + 6);
+        const hit = aggs.filter((a) => a.weekTotal > 0).length;
+        setDraft((d) => mergeEcountIntoReport(d, aggs));
+        parts.push(`매출 ${dates[0].slice(5)}~${dates[dates.length - 1].slice(5)} · ${ymd(weekDate).slice(5)}~${ymd(sun).slice(5)} 주간 실적 ${hit}곳`);
+      }
+      if (items.length) {
+        const itemMap = aggregateItems(items);
+        setDraft((d) => mergeItemsIntoReport(d, itemMap));
+        parts.push(`품목 ${new Set(items.map((i) => i.name)).size}종`);
+      }
+      setUpInfo(`✅ ${parts.join(" · ")} 반영 (매장을 펼쳐 확인 · 저장 버튼을 눌러 확정)`);
     } catch (e) {
       setUpInfo("⚠ 파일을 읽지 못했습니다: " + (e instanceof Error ? e.message : String(e)));
     } finally {
