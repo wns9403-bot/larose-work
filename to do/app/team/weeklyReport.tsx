@@ -351,7 +351,7 @@ export function WeeklyReportView({
             <div className="wr-table-wrap">
               <table className="wr-table wr-rank-table">
                 <thead>
-                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th></tr>
+                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th><th className="wr-rank-sp"></th></tr>
                 </thead>
                 <tbody>
                   {ranked.map((s, i) => (
@@ -363,6 +363,7 @@ export function WeeklyReportView({
                       <td className="wr-num right">{s.count ? s.count.toLocaleString() : "-"}</td>
                       <td className="wr-num right">{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</td>
                       <td className="wr-num right">{s.personDays ? fmtWon(perHeadDailyOf(s)) : "-"}</td>
+                      <td className="wr-rank-sp"></td>
                     </tr>
                   ))}
                 </tbody>

@@ -66,8 +66,10 @@ export type StorePerf = {
   items?: StoreItem[];       // 품목별 판매 TOP (품목별 엑셀 업로드 시)
   netSales?: number;         // 순매출 (공급가액)
   count?: number;            // 판매건수 (전표 수)
-  staff?: string[];          // 근무직원 (스케줄)
-  personDays?: number;       // 주간 연인원 (인당 일매출 분모)
+  staff?: string[];          // 근무직원 (스케줄, 내부용)
+  personDays?: number;       // 주간 연인원
+  dailySales?: Record<string, number>;  // 주간 일별 매출 (인당 일매출용)
+  dayHead?: Record<string, number>;     // 주간 일별 근무인원 (인당 일매출용)
 };
 export type WeeklyMetric = { key: string; label: string; lastWeek: number; thisWeek: number };
 export type KeyProduct = { key: string; label: string; qty: number; rank: string; action: string };
@@ -349,6 +351,7 @@ export type StoreAgg = {
   weekTotal: number; weekQty: number; prevWeekTotal: number;
   monthTotal: number; monthQty: number; prevMonthTotal: number;
   weekNet: number; weekCount: number;   // 순매출(공급가액)·판매건수(전표수)
+  weekDaily: Record<string, number>;    // 주간 일별 매출
 };
 
 /* 콤마·통화 문자열 → 숫자 */
@@ -430,12 +433,13 @@ export function aggregateEcount(daily: EcountDaily[], monday: Date): StoreAgg[] 
   for (const d of daily) {
     const norm = normStoreName(d.store);
     let a = map.get(norm);
-    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0, prevMonthTotal: 0, weekNet: 0, weekCount: 0 }; map.set(norm, a); vouchers.set(norm, new Set()); }
+    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0, prevMonthTotal: 0, weekNet: 0, weekCount: 0, weekDaily: {} }; map.set(norm, a); vouchers.set(norm, new Set()); }
     const mk = d.date.slice(0, 7);
     if (mk === monthKey) { a.monthTotal += d.total; a.monthQty += d.qty; }
     if (mk === prevMonthKey) { a.prevMonthTotal += d.total; }
     if (d.date >= wStart && d.date <= wEnd) {
       a.weekTotal += d.total; a.weekQty += d.qty; a.weekNet += d.supply || 0;
+      a.weekDaily[d.date] = (a.weekDaily[d.date] || 0) + d.total;
       if (d.voucher) vouchers.get(norm)!.add(d.date + "|" + d.voucher);
     }
     if (d.date >= pStart && d.date <= pEnd) { a.prevWeekTotal += d.total; }
@@ -466,6 +470,7 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
       weekQty: a.weekQty,
       netSales: a.weekNet,
       count: a.weekCount,
+      dailySales: a.weekDaily,
       vsLastWeek: a.prevWeekTotal > 0 ? vsLabel(a.prevWeekTotal, a.weekTotal) : row.vsLastWeek,
     };
   });
@@ -474,7 +479,7 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
     .map((a) => ({
       id: rid("sp"), store: cleanEcountStore(a.store), grade: "",
       target: 0, actual: a.weekTotal, monthActual: a.monthTotal, prevMonthActual: a.prevMonthTotal, weekQty: a.weekQty,
-      netSales: a.weekNet, count: a.weekCount,
+      netSales: a.weekNet, count: a.weekCount, dailySales: a.weekDaily,
       vsLastWeek: vsLabel(a.prevWeekTotal, a.weekTotal), partLeadReport: false, cause: "",
     }));
   return { ...r, storePerf: [...filled, ...extra] };
@@ -526,7 +531,7 @@ export function mergeItemsIntoReport(r: WeeklyReport, itemMap: Map<string, Store
 
 /* ─── 근무 스케줄 엑셀 파싱 (담당자 × 날짜 = 그날 위치) ─── */
 export type ScheduleRec = { date: string; member: string; store: string };
-export type ScheduleAgg = { token: string; norm: string; staff: string[]; personDays: number };
+export type ScheduleAgg = { token: string; norm: string; staff: string[]; personDays: number; perDay: Record<string, number> };
 
 /* 매장 아님(제외): 사무실·연차·휴가·오프 등 */
 const NON_STORE = /사무실|연차|휴가|오프|오전|오후|미정|대기/;
@@ -573,32 +578,52 @@ export function parseScheduleSheet(rows: unknown[][], year: number): ScheduleRec
 export function aggregateSchedule(recs: ScheduleRec[], monday: Date): ScheduleAgg[] {
   const sun = new Date(monday); sun.setDate(monday.getDate() + 6);
   const wStart = ymd(monday), wEnd = ymd(sun);
-  const map = new Map<string, { token: string; staff: Set<string>; personDays: number }>();
+  const map = new Map<string, { token: string; staff: Set<string>; perDay: Map<string, Set<string>> }>();
   for (const r of recs) {
     if (r.date < wStart || r.date > wEnd) continue;
     const norm = normStoreName(r.store);
     let g = map.get(norm);
-    if (!g) { g = { token: r.store, staff: new Set(), personDays: 0 }; map.set(norm, g); }
+    if (!g) { g = { token: r.store, staff: new Set(), perDay: new Map() }; map.set(norm, g); }
     g.staff.add(r.member);
-    g.personDays += 1;
+    if (!g.perDay.has(r.date)) g.perDay.set(r.date, new Set());
+    g.perDay.get(r.date)!.add(r.member);
   }
-  return [...map.entries()].map(([norm, g]) => ({ norm, token: g.token, staff: [...g.staff], personDays: g.personDays }));
+  return [...map.entries()].map(([norm, g]) => {
+    const perDay: Record<string, number> = {};
+    let personDays = 0;
+    for (const [d, set] of g.perDay) { perDay[d] = set.size; personDays += set.size; }
+    return { norm, token: g.token, staff: [...g.staff], personDays, perDay };
+  });
 }
 
 /* 매장명 근사 매칭: "부산"(스케줄) ↔ "부산본"(이카운트) */
 const storeMatch = (a: string, b: string) => a === b || (a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a)));
 
-/* 스케줄 집계를 점검표 매장 행에 병합 (근무직원·연인원) */
+/* 스케줄 집계를 점검표 매장 행에 병합 (근무직원·연인원·일별 근무인원) */
 export function mergeScheduleIntoReport(r: WeeklyReport, sched: ScheduleAgg[]): WeeklyReport {
   const storePerf = r.storePerf.map((row) => {
     const rn = normStoreName(row.store);
     const g = sched.find((s) => storeMatch(rn, s.norm));
-    if (!g) return { ...row, staff: [], personDays: 0 };
-    return { ...row, staff: g.staff, personDays: g.personDays };
+    if (!g) return { ...row, staff: [], personDays: 0, dayHead: {} };
+    return { ...row, staff: g.staff, personDays: g.personDays, dayHead: g.perDay };
   });
   return { ...r, storePerf };
 }
 
-/* 객단가·인당 일매출 */
+/* 객단가 = 매출 ÷ 판매건수 */
 export const aovOf = (s: StorePerf) => (s.count ? Math.round(s.actual / s.count) : 0);
-export const perHeadDailyOf = (s: StorePerf) => (s.personDays ? Math.round(s.actual / s.personDays) : 0);
+
+/* 인당 일매출 = 근무한 날들의 (그날 매출 ÷ 그날 근무인원) 평균.
+   근무일별 매출을 그날 인원으로 나눠 평균 → 근무 1일뿐인 매장이 주간 전체매출로 왜곡되지 않음. */
+export const perHeadDailyOf = (s: StorePerf) => {
+  const ds = s.dailySales, dh = s.dayHead;
+  if (ds && dh) {
+    let sum = 0, n = 0;
+    for (const d of Object.keys(dh)) {
+      const head = dh[d], sales = ds[d] || 0;
+      if (head > 0 && sales > 0) { sum += sales / head; n++; }
+    }
+    if (n > 0) return Math.round(sum / n);
+  }
+  return s.personDays ? Math.round(s.actual / s.personDays) : 0;   // 일별 매출 없을 때 폴백
+};
