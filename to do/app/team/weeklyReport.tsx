@@ -188,8 +188,8 @@ export function WeeklyReportView({
             <thead>
               <tr>
                 <th className="wr-exp-th">상세</th>
-                <th>매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>당월 누계</th><th>달성률</th>
-                <th>전주대비</th><th>파트장 보고(월)</th><th>원인·대응 (미달 시)</th><th></th>
+                <th className="wr-store-th">매장</th><th>등급</th><th>주간 목표</th><th>주간 실적</th><th>전월 누계</th><th>당월 누계</th><th>달성률</th>
+                <th>전주대비</th><th>파트장 보고(주간)</th><th>원인·대응 (미달 시)</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -197,7 +197,7 @@ export function WeeklyReportView({
                 const coreNorms = new Set(CORE_STORES.map(normStoreName));
                 const rows = draft.storePerf.map((s) => ({ s, core: coreNorms.has(normStoreName(s.store)) }));
                 const restCount = rows.filter((r) => !r.core).length;
-                const COLS = 11;
+                const COLS = 12;
                 const renderRows = (s: StorePerf, core: boolean) => {
                   const rate = achievementRate(s.target, s.actual);
                   const rc = rateColor(rate);
@@ -212,13 +212,14 @@ export function WeeklyReportView({
                           {s.items && s.items.length ? <span className="wr-exp-badge">{s.items.length}</span> : null}
                         </button>
                       </td>
-                      <td>
+                      <td className="wr-store-cell">
                         {core && <span className="wr-core-tag">핵심</span>}
-                        <input list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} />
+                        <input className="wr-store-name" list="wr-store-names" value={s.store} onChange={(e) => setStorePerf(s.id, { store: e.target.value })} />
                       </td>
                       <td className="wr-narrow"><input value={s.grade} onChange={(e) => setStorePerf(s.id, { grade: e.target.value })} placeholder="S/A/B" /></td>
                       <td className="wr-num"><input type="number" value={s.target || ""} onChange={(e) => setStorePerf(s.id, { target: Number(e.target.value) || 0 })} /></td>
-                      <td className="wr-num"><input type="number" value={s.actual || ""} onChange={(e) => setStorePerf(s.id, { actual: Number(e.target.value) || 0 })} /></td>
+                      <td className="wr-num right"><span className="wr-actual">{s.actual ? fmtWon(s.actual) : "-"}</span></td>
+                      <td className="wr-num right"><span className="wr-month">{s.prevMonthActual ? fmtWon(s.prevMonthActual) : "-"}</span></td>
                       <td className="wr-num right">
                         <span className="wr-month">{s.monthActual ? fmtWon(s.monthActual) : "-"}</span>
                         {s.weekQty ? <small className="wr-qty">{s.weekQty}개</small> : null}
@@ -297,7 +298,7 @@ export function WeeklyReportView({
         </div>
         <div className="wr-row-actions">
           <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
-          <span className="wr-hint">📥 <b>일별 매출</b> 엑셀 → 주간 실적·당월 누계·전주대비 / <b>품목별</b> 엑셀 → 매장별 품목 TOP · 파일 종류 자동 인식 (목표·인원은 직접 입력)</span>
+          <span className="wr-hint">📥 이카운트 엑셀 업로드 → 주간 실적·전월/당월 누계·전주대비·품목 TOP 자동 계산 (주간 실적은 현황 표시 · 목표·인원만 직접 입력)</span>
         </div>
       </div>
 

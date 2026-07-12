@@ -61,7 +61,7 @@ export type StorePerf = {
   id: string; store: string; grade: string;
   target: number; actual: number; vsLastWeek: string;
   partLeadReport: boolean; cause: string;
-  monthActual?: number; weekQty?: number;
+  monthActual?: number; prevMonthActual?: number; weekQty?: number;
   headcount?: number;        // 인당 매출 계산용 (수기 입력)
   items?: StoreItem[];       // 품목별 판매 TOP (품목별 엑셀 업로드 시)
 };
@@ -343,7 +343,7 @@ export type EcountDaily = { store: string; date: string; qty: number; total: num
 export type StoreAgg = {
   store: string; norm: string;
   weekTotal: number; weekQty: number; prevWeekTotal: number;
-  monthTotal: number; monthQty: number;
+  monthTotal: number; monthQty: number; prevMonthTotal: number;
 };
 
 /* 콤마·통화 문자열 → 숫자 */
@@ -412,13 +412,16 @@ export function aggregateEcount(daily: EcountDaily[], monday: Date): StoreAgg[] 
   const prevSun = new Date(prevMon); prevSun.setDate(prevMon.getDate() + 6);
   const wStart = ymd(monday), wEnd = ymd(sun), pStart = ymd(prevMon), pEnd = ymd(prevSun);
   const monthKey = ymd(monday).slice(0, 7);
+  const prevMonthKey = ymd(new Date(monday.getFullYear(), monday.getMonth() - 1, 1)).slice(0, 7);
 
   const map = new Map<string, StoreAgg>();
   for (const d of daily) {
     const norm = normStoreName(d.store);
     let a = map.get(norm);
-    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0 }; map.set(norm, a); }
-    if (d.date.slice(0, 7) === monthKey) { a.monthTotal += d.total; a.monthQty += d.qty; }
+    if (!a) { a = { store: d.store, norm, weekTotal: 0, weekQty: 0, prevWeekTotal: 0, monthTotal: 0, monthQty: 0, prevMonthTotal: 0 }; map.set(norm, a); }
+    const mk = d.date.slice(0, 7);
+    if (mk === monthKey) { a.monthTotal += d.total; a.monthQty += d.qty; }
+    if (mk === prevMonthKey) { a.prevMonthTotal += d.total; }
     if (d.date >= wStart && d.date <= wEnd) { a.weekTotal += d.total; a.weekQty += d.qty; }
     if (d.date >= pStart && d.date <= pEnd) { a.prevWeekTotal += d.total; }
   }
@@ -443,6 +446,7 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
       ...row,
       actual: a.weekTotal,
       monthActual: a.monthTotal,
+      prevMonthActual: a.prevMonthTotal,
       weekQty: a.weekQty,
       vsLastWeek: a.prevWeekTotal > 0 ? vsLabel(a.prevWeekTotal, a.weekTotal) : row.vsLastWeek,
     };
@@ -451,7 +455,7 @@ export function mergeEcountIntoReport(r: WeeklyReport, aggs: StoreAgg[]): Weekly
     .filter((a) => !used.has(a.norm) && (a.weekTotal > 0 || a.monthTotal > 0))
     .map((a) => ({
       id: rid("sp"), store: cleanEcountStore(a.store), grade: "",
-      target: 0, actual: a.weekTotal, monthActual: a.monthTotal, weekQty: a.weekQty,
+      target: 0, actual: a.weekTotal, monthActual: a.monthTotal, prevMonthActual: a.prevMonthTotal, weekQty: a.weekQty,
       vsLastWeek: vsLabel(a.prevWeekTotal, a.weekTotal), partLeadReport: false, cause: "",
     }));
   return { ...r, storePerf: [...filled, ...extra] };

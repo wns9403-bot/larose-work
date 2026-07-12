@@ -725,6 +725,10 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .wr-table td.wr-num input{min-width:82px;text-align:right}
 .wr-table td.right{text-align:right}
 .wr-month{font-weight:800;font-size:12px;color:var(--ink2)}
+.wr-actual{font-weight:800;font-size:12.5px;color:var(--rose-deep)}
+/* 매장명 칸 폭 제한 (빈칸이 과하게 넓어지지 않도록) */
+.wr-store-table th.wr-store-th,.wr-store-table td.wr-store-cell{width:200px}
+.wr-store-table td.wr-store-cell input.wr-store-name{min-width:0;max-width:100%}
 .wr-qty{display:block;font-size:10.5px;color:var(--ink3);font-weight:700;margin-top:1px}
 .wr-row-actions{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
 .wr-hint{font-size:11px;color:var(--ink3);font-weight:600;line-height:1.5}
