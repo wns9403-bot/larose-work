@@ -259,12 +259,8 @@ export function WeeklyReportView({
                                   <span>인당 일매출</span>
                                   <b>{s.personDays ? fmtWon(perHeadDailyOf(s)) : (perHead(s) ? fmtWon(perHead(s)) : "-")}</b>
                                   {s.personDays
-                                    ? <small className="wr-head-note">연인원 {s.personDays}</small>
+                                    ? <small className="wr-head-note">근무 {s.personDays}</small>
                                     : <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>}
-                                </div>
-                                <div className="wr-metric wr-metric-staff">
-                                  <span>근무직원</span>
-                                  <b>{s.staff && s.staff.length ? s.staff.join(", ") : "-"}</b>
                                 </div>
                               </div>
                             </div>
@@ -337,7 +333,7 @@ export function WeeklyReportView({
         const withHead = withSales.filter((s) => s.personDays);
         if (withHead.length) {
           const hi = [...withHead].sort((a, b) => perHeadDailyOf(b) - perHeadDailyOf(a))[0];
-          lines.push(<>인당 일매출 최고는 <b>{hi.store}</b> — {fmtWon(perHeadDailyOf(hi))} ({(hi.staff || []).join("/")}).</>);
+          lines.push(<>인당 일매출 최고는 <b>{hi.store}</b> — {fmtWon(perHeadDailyOf(hi))}.</>);
         }
         const drops = withSales.filter((s) => s.vsLastWeek.startsWith("-") && parseInt(s.vsLastWeek) <= -20);
         if (drops.length) lines.push(<span>전주 대비 20%↓ 하락: <b style={{ color: "var(--urgent)" }}>{drops.map((d) => `${d.store}(${d.vsLastWeek})`).join(", ")}</b> — 원인 확인 필요.</span>);
@@ -355,7 +351,7 @@ export function WeeklyReportView({
             <div className="wr-table-wrap">
               <table className="wr-table wr-rank-table">
                 <thead>
-                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th><th>근무직원</th></tr>
+                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th></tr>
                 </thead>
                 <tbody>
                   {ranked.map((s, i) => (
@@ -367,7 +363,6 @@ export function WeeklyReportView({
                       <td className="wr-num right">{s.count ? s.count.toLocaleString() : "-"}</td>
                       <td className="wr-num right">{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</td>
                       <td className="wr-num right">{s.personDays ? fmtWon(perHeadDailyOf(s)) : "-"}</td>
-                      <td className="wr-staff-cell">{s.staff && s.staff.length ? s.staff.join(", ") : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
