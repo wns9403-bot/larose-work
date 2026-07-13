@@ -67,9 +67,8 @@ export function WeeklyReportView({
         if (recs.length) {
           const sched = aggregateSchedule(recs, weekDate);
           setDraft((d) => mergeScheduleIntoReport(d, sched));
-          const hit = sched.filter((s) => s.staff.length).length;
-          const memCnt = new Set(recs.map((r) => r.member)).size;
-          setUpInfo(`✅ 근무 스케줄 반영 · 담당자 ${memCnt}명 · 근무 잡힌 매장 ${hit}곳 (매장을 펼쳐 인당 매출 확인 · 저장 버튼을 눌러 확정)`);
+          const hit = sched.filter((s) => s.personDays > 0).length;
+          setUpInfo(`✅ 근무 스케줄 반영 · 현장 인원 잡힌 매장 ${hit}곳 (매장을 펼쳐 인당 매출 확인 · 저장 버튼을 눌러 확정)`);
           return;
         }
         setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 또는 근무 스케줄 엑셀인지 확인해주세요.");
@@ -256,8 +255,8 @@ export function WeeklyReportView({
                                 <div className="wr-metric wr-metric-head">
                                   <span>인당 매출</span>
                                   <b>{perHeadOf(s) ? fmtWon(perHeadOf(s)) : "-"}</b>
-                                  {s.staff && s.staff.length
-                                    ? <small className="wr-head-note">근무 {s.staff.length}명</small>
+                                  {s.personDays
+                                    ? <small className="wr-head-note">주간 연인원 {s.personDays}명</small>
                                     : <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>}
                                 </div>
                               </div>

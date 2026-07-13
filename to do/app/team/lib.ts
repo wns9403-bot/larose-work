@@ -529,14 +529,13 @@ export function mergeItemsIntoReport(r: WeeklyReport, itemMap: Map<string, Store
   return { ...r, storePerf: [...filled, ...extra] };
 }
 
-/* ─── 근무 스케줄 엑셀 파싱 (담당자 × 날짜 = 그날 위치) ─── */
-export type ScheduleRec = { date: string; member: string; store: string };
-export type ScheduleAgg = { token: string; norm: string; staff: string[]; personDays: number; perDay: Record<string, number> };
+/* ─── 근무 스케줄 엑셀 파싱 (매장 블록 × 날짜 = 현장 근무 인원) ───
+   시트는 가로로 매장 블록이 이어지는 와이드 구조:
+   '날짜' 헤더행 바로 윗행에 매장명(블록 제목), 헤더행에 블록마다 '인원' 열.
+   HQ 담당자 열은 세지 않고 각 매장 블록의 일별 '인원' 값(현장 근무 인원수)만 사용. */
+export type ScheduleRec = { date: string; store: string; head: number };
+export type ScheduleAgg = { token: string; norm: string; personDays: number; perDay: Record<string, number> };
 
-/* 매장 아님(제외): 사무실·연차·휴가·오프 등 */
-const NON_STORE = /사무실|연차|휴가|오프|오전|오후|미정|대기/;
-
-/* 헤더에서 '날짜' 열을 찾아 오른쪽 담당자 열을 매핑, 각 셀의 (위치)를 추출 */
 export function parseScheduleSheet(rows: unknown[][], year: number): ScheduleRec[] {
   let hIdx = -1, cDate = -1;
   for (let i = 0; i < rows.length; i++) {
@@ -545,14 +544,21 @@ export function parseScheduleSheet(rows: unknown[][], year: number): ScheduleRec
     const di = c.indexOf("날짜");
     if (di >= 0) { hIdx = i; cDate = di; break; }
   }
-  if (hIdx < 0) return [];
+  if (hIdx < 0 || hIdx === 0) return [];
   const header = rows[hIdx].map((x) => String(x ?? "").trim());
-  const members: { name: string; col: number }[] = [];
+  const titleRow = (rows[hIdx - 1] || []).map((x) => String(x ?? "").trim());
+  /* 블록 제목(매장명) 위치 수집 */
+  const titles: { name: string; col: number }[] = [];
+  for (let j = 0; j < titleRow.length; j++) {
+    if (titleRow[j]) titles.push({ name: titleRow[j], col: j });
+  }
+  /* 헤더의 '인원' 열마다 왼쪽에서 가장 가까운 블록 제목 = 그 매장 */
+  const blocks: { store: string; headCol: number }[] = [];
   for (let j = cDate + 1; j < header.length; j++) {
-    const nm = header[j];
-    if (!nm) continue;
-    if (nm.includes("설치") || nm.includes("철수") || nm.includes("비고")) break;
-    members.push({ name: nm, col: j });
+    if (header[j] !== "인원") continue;
+    let store = "";
+    for (const t of titles) { if (t.col <= j) store = t.name; else break; }
+    if (store && store !== "HQ") blocks.push({ store, headCol: j });
   }
   const recs: ScheduleRec[] = [];
   for (let i = hIdx + 1; i < rows.length; i++) {
@@ -561,51 +567,43 @@ export function parseScheduleSheet(rows: unknown[][], year: number): ScheduleRec
     const dm = String(r[cDate] ?? "").trim().match(/(\d{1,2})\.\s*(\d{1,2})\./);
     if (!dm) continue;
     const date = `${year}-${dm[1].padStart(2, "0")}-${dm[2].padStart(2, "0")}`;
-    for (const m of members) {
-      const raw = String(r[m.col] ?? "").replace(/[()]/g, "").trim();
-      if (!raw) continue;
-      for (let part of raw.split(",")) {
-        part = part.trim();
-        if (!part || NON_STORE.test(part)) continue;
-        recs.push({ date, member: m.name, store: part });
-      }
+    for (const b of blocks) {
+      const head = toNum(r[b.headCol]);
+      if (head > 0) recs.push({ date, store: b.store, head });
     }
   }
   return recs;
 }
 
-/* 선택 주 기준 매장별 근무직원·연인원 */
+/* 선택 주 기준 매장별 연인원(일별 현장 인원 합) */
 export function aggregateSchedule(recs: ScheduleRec[], monday: Date): ScheduleAgg[] {
   const sun = new Date(monday); sun.setDate(monday.getDate() + 6);
   const wStart = ymd(monday), wEnd = ymd(sun);
-  const map = new Map<string, { token: string; staff: Set<string>; perDay: Map<string, Set<string>> }>();
+  const map = new Map<string, { token: string; perDay: Record<string, number> }>();
   for (const r of recs) {
     if (r.date < wStart || r.date > wEnd) continue;
     const norm = normStoreName(r.store);
     let g = map.get(norm);
-    if (!g) { g = { token: r.store, staff: new Set(), perDay: new Map() }; map.set(norm, g); }
-    g.staff.add(r.member);
-    if (!g.perDay.has(r.date)) g.perDay.set(r.date, new Set());
-    g.perDay.get(r.date)!.add(r.member);
+    if (!g) { g = { token: r.store, perDay: {} }; map.set(norm, g); }
+    g.perDay[r.date] = (g.perDay[r.date] || 0) + r.head;
   }
-  return [...map.entries()].map(([norm, g]) => {
-    const perDay: Record<string, number> = {};
-    let personDays = 0;
-    for (const [d, set] of g.perDay) { perDay[d] = set.size; personDays += set.size; }
-    return { norm, token: g.token, staff: [...g.staff], personDays, perDay };
-  });
+  return [...map.entries()].map(([norm, g]) => ({
+    norm, token: g.token,
+    personDays: Object.values(g.perDay).reduce((s, n) => s + n, 0),
+    perDay: g.perDay,
+  }));
 }
 
-/* 매장명 근사 매칭: "부산"(스케줄) ↔ "부산본"(이카운트) */
+/* 매장명 근사 매칭: "소공"(스케줄) ↔ "소공본"(이카운트) */
 const storeMatch = (a: string, b: string) => a === b || (a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a)));
 
-/* 스케줄 집계를 점검표 매장 행에 병합 (근무직원·연인원·일별 근무인원) */
+/* 스케줄 집계를 점검표 매장 행에 병합 (연인원·일별 인원) */
 export function mergeScheduleIntoReport(r: WeeklyReport, sched: ScheduleAgg[]): WeeklyReport {
   const storePerf = r.storePerf.map((row) => {
     const rn = normStoreName(row.store);
     const g = sched.find((s) => storeMatch(rn, s.norm));
-    if (!g) return { ...row, staff: [], personDays: 0, dayHead: {} };
-    return { ...row, staff: g.staff, personDays: g.personDays, dayHead: g.perDay };
+    if (!g) return { ...row, personDays: 0, dayHead: {} };
+    return { ...row, personDays: g.personDays, dayHead: g.perDay };
   });
   return { ...r, storePerf };
 }
@@ -613,10 +611,10 @@ export function mergeScheduleIntoReport(r: WeeklyReport, sched: ScheduleAgg[]): 
 /* 객단가 = 매출 ÷ 판매건수 */
 export const aovOf = (s: StorePerf) => (s.count ? Math.round(s.actual / s.count) : 0);
 
-/* 근무 인원수 = 그 주 그 매장 근무한 고유 인원 (스케줄), 없으면 수기 입력 */
-export const headcountOf = (s: StorePerf) => (s.staff && s.staff.length ? s.staff.length : (s.headcount || 0));
+/* 인당 매출 분모 = 주간 연인원(현장 스케줄), 없으면 수기 입력 인원 */
+export const headcountOf = (s: StorePerf) => (s.personDays || s.headcount || 0);
 
-/* 인당 매출 = 매출 ÷ 근무 인원수 */
+/* 인당 매출(평균) = 주간 매출 ÷ 주간 연인원 — 시트의 '1인당 매출' 규칙과 동일 */
 export const perHeadOf = (s: StorePerf) => {
   const h = headcountOf(s);
   return h ? Math.round(s.actual / h) : 0;
