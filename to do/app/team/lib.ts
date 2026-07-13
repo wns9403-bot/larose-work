@@ -613,17 +613,11 @@ export function mergeScheduleIntoReport(r: WeeklyReport, sched: ScheduleAgg[]): 
 /* 객단가 = 매출 ÷ 판매건수 */
 export const aovOf = (s: StorePerf) => (s.count ? Math.round(s.actual / s.count) : 0);
 
-/* 인당 일매출 = 근무한 날들의 (그날 매출 ÷ 그날 근무인원) 평균.
-   근무일별 매출을 그날 인원으로 나눠 평균 → 근무 1일뿐인 매장이 주간 전체매출로 왜곡되지 않음. */
-export const perHeadDailyOf = (s: StorePerf) => {
-  const ds = s.dailySales, dh = s.dayHead;
-  if (ds && dh) {
-    let sum = 0, n = 0;
-    for (const d of Object.keys(dh)) {
-      const head = dh[d], sales = ds[d] || 0;
-      if (head > 0 && sales > 0) { sum += sales / head; n++; }
-    }
-    if (n > 0) return Math.round(sum / n);
-  }
-  return s.personDays ? Math.round(s.actual / s.personDays) : 0;   // 일별 매출 없을 때 폴백
+/* 근무 인원수 = 그 주 그 매장 근무한 고유 인원 (스케줄), 없으면 수기 입력 */
+export const headcountOf = (s: StorePerf) => (s.staff && s.staff.length ? s.staff.length : (s.headcount || 0));
+
+/* 인당 매출 = 매출 ÷ 근무 인원수 */
+export const perHeadOf = (s: StorePerf) => {
+  const h = headcountOf(s);
+  return h ? Math.round(s.actual / h) : 0;
 };

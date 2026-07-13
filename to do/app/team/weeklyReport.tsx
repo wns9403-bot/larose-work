@@ -8,7 +8,7 @@ import {
   PRIORITIES, CORE_STORES, ymd, mondayOf, achievementRate, defaultWeeklyReport, rid, fmtDateTime,
   parseEcountSheet, aggregateEcount, mergeEcountIntoReport, fmtWon, normStoreName,
   aggregateItems, mergeItemsIntoReport,
-  parseScheduleSheet, aggregateSchedule, mergeScheduleIntoReport, aovOf, perHeadDailyOf,
+  parseScheduleSheet, aggregateSchedule, mergeScheduleIntoReport, aovOf, perHeadOf, headcountOf,
 } from "./lib";
 
 function rateColor(rate: number) {
@@ -69,7 +69,7 @@ export function WeeklyReportView({
           setDraft((d) => mergeScheduleIntoReport(d, sched));
           const hit = sched.filter((s) => s.staff.length).length;
           const memCnt = new Set(recs.map((r) => r.member)).size;
-          setUpInfo(`✅ 근무 스케줄 반영 · 담당자 ${memCnt}명 · 근무 잡힌 매장 ${hit}곳 (매장을 펼쳐 근무직원·인당 일매출 확인 · 저장 버튼을 눌러 확정)`);
+          setUpInfo(`✅ 근무 스케줄 반영 · 담당자 ${memCnt}명 · 근무 잡힌 매장 ${hit}곳 (매장을 펼쳐 인당 매출 확인 · 저장 버튼을 눌러 확정)`);
           return;
         }
         setUpInfo("⚠ 인식된 데이터가 없습니다. 이카운트 [판매현황] 또는 근무 스케줄 엑셀인지 확인해주세요.");
@@ -111,8 +111,6 @@ export function WeeklyReportView({
     setDraft((d) => ({ ...d, storePerf: d.storePerf.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const addStorePerf = () =>
     setDraft((d) => ({ ...d, storePerf: [...d.storePerf, { id: rid("sp"), store: "", grade: "", target: 0, actual: 0, vsLastWeek: "", partLeadReport: false, cause: "" }] }));
-  /* 인당 매출(수기 인원 입력 폴백) = 주간 매출 ÷ 인원수 */
-  const perHead = (s: StorePerf) => (s.headcount ? Math.round(s.actual / s.headcount) : 0);
   const removeStorePerf = (id: string) =>
     setDraft((d) => ({ ...d, storePerf: d.storePerf.filter((s) => s.id !== id) }));
 
@@ -256,10 +254,10 @@ export function WeeklyReportView({
                                 <div className="wr-metric"><span>객단가</span><b>{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</b></div>
                                 <div className="wr-metric"><span>전주대비</span><b className={down ? "wr-dn" : "wr-up"}>{s.vsLastWeek || "-"}</b></div>
                                 <div className="wr-metric wr-metric-head">
-                                  <span>인당 일매출</span>
-                                  <b>{s.personDays ? fmtWon(perHeadDailyOf(s)) : (perHead(s) ? fmtWon(perHead(s)) : "-")}</b>
-                                  {s.personDays
-                                    ? <small className="wr-head-note">근무 {s.personDays}</small>
+                                  <span>인당 매출</span>
+                                  <b>{perHeadOf(s) ? fmtWon(perHeadOf(s)) : "-"}</b>
+                                  {s.staff && s.staff.length
+                                    ? <small className="wr-head-note">근무 {s.staff.length}명</small>
                                     : <label>인원 <input type="number" value={s.headcount || ""} onChange={(e) => setStorePerf(s.id, { headcount: Number(e.target.value) || 0 })} /></label>}
                                 </div>
                               </div>
@@ -312,7 +310,7 @@ export function WeeklyReportView({
         </div>
         <div className="wr-row-actions">
           <button className="btn btn-ghost wr-add" onClick={addStorePerf}>+ 매장 추가</button>
-          <span className="wr-hint">📥 이카운트(전표별) 엑셀 → 매출·순매출·건수·객단가·품목 / 근무 스케줄 엑셀 → 근무직원·인당 일매출 · 파일 종류 자동 인식 · 매장 펼치면 상세</span>
+          <span className="wr-hint">📥 이카운트(전표별) 엑셀 → 매출·순매출·건수·객단가·품목 / 근무 스케줄 엑셀 → 인당 매출(매출÷근무인원) · 파일 종류 자동 인식 · 매장 펼치면 상세</span>
         </div>
       </div>
 
@@ -330,10 +328,10 @@ export function WeeklyReportView({
           const lo = [...withAov].sort((a, b) => aovOf(a) - aovOf(b))[0];
           if (hi.id !== lo.id) lines.push(<>객단가는 <b>{hi.store}</b> {fmtWon(aovOf(hi))} 최고 / <b>{lo.store}</b> {fmtWon(aovOf(lo))} 최저 — 낮은 곳은 세트·추가판매 점검.</>);
         }
-        const withHead = withSales.filter((s) => s.personDays);
+        const withHead = withSales.filter((s) => headcountOf(s));
         if (withHead.length) {
-          const hi = [...withHead].sort((a, b) => perHeadDailyOf(b) - perHeadDailyOf(a))[0];
-          lines.push(<>인당 일매출 최고는 <b>{hi.store}</b> — {fmtWon(perHeadDailyOf(hi))}.</>);
+          const hi = [...withHead].sort((a, b) => perHeadOf(b) - perHeadOf(a))[0];
+          lines.push(<>인당 매출 최고는 <b>{hi.store}</b> — {fmtWon(perHeadOf(hi))}.</>);
         }
         const drops = withSales.filter((s) => s.vsLastWeek.startsWith("-") && parseInt(s.vsLastWeek) <= -20);
         if (drops.length) lines.push(<span>전주 대비 20%↓ 하락: <b style={{ color: "var(--urgent)" }}>{drops.map((d) => `${d.store}(${d.vsLastWeek})`).join(", ")}</b> — 원인 확인 필요.</span>);
@@ -351,7 +349,7 @@ export function WeeklyReportView({
             <div className="wr-table-wrap">
               <table className="wr-table wr-rank-table">
                 <thead>
-                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 일매출</th><th className="wr-rank-sp"></th></tr>
+                  <tr><th className="wr-narrow center">순위</th><th>매장</th><th className="right">매출</th><th className="right">순매출</th><th className="right">건수</th><th className="right">객단가</th><th className="right">인당 매출</th><th className="wr-rank-sp"></th></tr>
                 </thead>
                 <tbody>
                   {ranked.map((s, i) => (
@@ -362,7 +360,7 @@ export function WeeklyReportView({
                       <td className="wr-num right">{s.netSales ? fmtWon(s.netSales) : "-"}</td>
                       <td className="wr-num right">{s.count ? s.count.toLocaleString() : "-"}</td>
                       <td className="wr-num right">{aovOf(s) ? fmtWon(aovOf(s)) : "-"}</td>
-                      <td className="wr-num right">{s.personDays ? fmtWon(perHeadDailyOf(s)) : "-"}</td>
+                      <td className="wr-num right">{perHeadOf(s) ? fmtWon(perHeadOf(s)) : "-"}</td>
                       <td className="wr-rank-sp"></td>
                     </tr>
                   ))}
