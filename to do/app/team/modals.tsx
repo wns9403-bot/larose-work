@@ -6,7 +6,7 @@ import {
   Task, Member, Store, Issue, ArchiveEntry, Activity,
   PRIORITIES, FREQS, AVATAR_ICONS, DEFAULT_MEMBERS,
   uid, issueUid, fmtDate, fmtDateTime, taskProgress, storeInfo, cleanStore,
-  avatarGlyph, initials, daysLeft, dueLabel, isOverdue,
+  avatarGlyph, initials, daysLeft, dueLabel, isOverdue, isImminent, ALERT_DAYS,
 } from "./lib";
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -35,8 +35,9 @@ export function TaskModal({
   const [priority, setPriority] = useState(task?.priority || "중요");
   const [freq, setFreq] = useState(task?.freq || "비정기");
   const [status, setStatus] = useState(task?.status || "대기");
+  const [start, setStart] = useState(task?.start_date || "");
   const [due, setDue] = useState(task?.due_date || "");
-  const [progress, setProgress] = useState(task?.progress ?? 0);
+  const [memo, setMemo] = useState(task?.memo || "");
 
   const storeOptions = useMemo(() => {
     const owned = stores.filter((s) => s.owner === assignee);
@@ -51,21 +52,32 @@ export function TaskModal({
 
   const save = () => {
     if (!title.trim()) { alert("업무명을 입력하세요."); return; }
-    onSave({
+    if (start && due && start > due) { alert("시작일이 마감일보다 늦습니다."); return; }
+    const base: Task = {
       id: task?.id || uid(),
       title: title.trim(),
       assignee,
       store: store.trim() || "-",
       priority, freq, status,
+      start_date: start || null,
       due_date: due || null,
-      progress: Number(progress),
+      memo: memo.trim(),
+      progress: 0,
       created_at: task?.created_at || Date.now(),
       created_by: task?.created_by || me,
       rechecked: task && status === "완료" && task.status === "완료" ? task.rechecked || false : false,
       updated_at: Date.now(),
       updated_by: me,
-    });
+    };
+    onSave({ ...base, progress: taskProgress(base) });   // 진행률 자동 계산
   };
+
+  /* 모달에서 미리보기용 자동 진행률 */
+  const previewProg = taskProgress({
+    id: "", title: "", assignee: "", store: "", priority: "", freq: "",
+    status, start_date: start || null, due_date: due || null, memo: "", progress: 0,
+    created_at: task?.created_at,
+  });
 
   return (
     <Overlay onClose={onClose}>
@@ -141,16 +153,26 @@ export function TaskModal({
             </select>
           </div>
           <div>
+            <label>진행률 <span className="prog-auto-tag">자동</span></label>
+            <div className="prog-field prog-readonly">
+              <div className="prog-track"><div className="prog-fill" style={{ width: `${previewProg}%` }} /></div>
+              <b>{previewProg}%</b>
+            </div>
+          </div>
+        </div>
+        <div className="field row">
+          <div>
+            <label>시작일</label>
+            <input type="date" value={start} max={due || undefined} onChange={(e) => setStart(e.target.value)} />
+          </div>
+          <div>
             <label>마감일</label>
-            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+            <input type="date" value={due} min={start || undefined} onChange={(e) => setDue(e.target.value)} />
           </div>
         </div>
         <div className="field">
-          <label>진행률</label>
-          <div className="prog-field">
-            <input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => setProgress(Number(e.target.value))} />
-            <b>{progress}%</b>
-          </div>
+          <label>참조 / 메모</label>
+          <textarea className="task-memo" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="참고사항·링크·전달 메모 (선택)" rows={2} />
         </div>
         {task && (task.updated_by || task.created_by) && (
           <div className="modal-note">
@@ -480,28 +502,38 @@ export function ArchiveModal({
   );
 }
 
-/* ─── 주간 알림 ─── */
+/* ─── 마감 임박 알림 ─── */
 export function WeeklyAlertModal({
-  tasks, onEdit, onClose,
-}: { tasks: Task[]; onEdit: (t: Task) => void; onClose: () => void }) {
+  tasks, onEdit, onClose, isLeader = false,
+}: { tasks: Task[]; onEdit: (t: Task) => void; onClose: () => void; isLeader?: boolean }) {
   const open = tasks.filter((t) => t.status !== "완료");
-  const overdue = open.filter(isOverdue);
+  const overdue = open.filter(isOverdue).sort((a, b) => (daysLeft(a.due_date) ?? 0) - (daysLeft(b.due_date) ?? 0));
+  const imminent = open.filter((t) => !isOverdue(t) && isImminent(t))
+    .sort((a, b) => (daysLeft(a.due_date) ?? 99) - (daysLeft(b.due_date) ?? 99));
   const dueThisWeek = open.filter((t) => { const d = daysLeft(t.due_date); return d !== null && d >= 0 && d <= 6; });
   const recheck = tasks.filter((t) => t.status === "완료" && !t.rechecked);
   const rows: [string, string, number, string][] = [
-    ["⏰", "지연 중인 업무", overdue.length, overdue.length ? "danger" : ""],
+    ["⏰", "지연된 업무", overdue.length, overdue.length ? "danger" : ""],
+    ["🚨", `마감 임박 (D-${ALERT_DAYS} 이내)`, imminent.length, imminent.length ? "warn" : ""],
     ["📅", "이번 주 마감 업무", dueThisWeek.length, ""],
-    ["🔄", "진행 중인 업무", open.filter((t) => t.status === "진행중").length, ""],
     ["☑", "리체크 대기 (완료 후 미확인)", recheck.length, recheck.length ? "warn" : ""],
   ];
+  const taskRow = (t: Task) => (
+    <div key={t.id} className="walert-task" onClick={() => { onClose(); onEdit(t); }}>
+      <span>{t.title}</span>
+      <small>{isLeader ? `${t.assignee} · ` : ""}{dueLabel(t.due_date)}</small>
+    </div>
+  );
   return (
     <Overlay onClose={onClose}>
       <div className="modal" style={{ maxWidth: 460 }}>
         <div className="modal-head">
-          <h3>🔔 주간 업무 리마인드</h3>
+          <h3>🔔 마감 임박 알림</h3>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <p style={{ fontSize: 13, color: "var(--ink2)", marginBottom: 14 }}>이번 주 시작 전에 아래 현황을 확인해 주세요.</p>
+        <p style={{ fontSize: 13, color: "var(--ink2)", marginBottom: 14 }}>
+          {isLeader ? "팀 전체의 마감 임박·지연 업무입니다. 담당 매니저를 확인해 주세요." : "마감이 다가온 내 업무입니다. 기한 전에 처리해 주세요."}
+        </p>
         <div className="walert-rows">
           {rows.map(([icon, label, count, cls]) => (
             <div key={label} className={`walert-row ${cls}`}>
@@ -511,15 +543,19 @@ export function WeeklyAlertModal({
             </div>
           ))}
         </div>
-        {overdue.length > 0 && (
+        {(overdue.length > 0 || imminent.length > 0) ? (
           <div className="walert-list">
-            {overdue.slice(0, 4).map((t) => (
-              <div key={t.id} className="walert-task" onClick={() => { onClose(); onEdit(t); }}>
-                <span>{t.title}</span>
-                <small>{t.assignee} · {dueLabel(t.due_date)}</small>
+            {overdue.slice(0, 6).map(taskRow)}
+            {imminent.slice(0, Math.max(0, 8 - Math.min(overdue.length, 6))).map(taskRow)}
+            {overdue.length + imminent.length > 8 && (
+              <div style={{ fontSize: 11, color: "var(--ink3)", padding: "4px 2px" }}>
+                외 {overdue.length + imminent.length - 8}건…
               </div>
-            ))}
-            {overdue.length > 4 && <div style={{ fontSize: 11, color: "var(--ink3)", padding: "4px 2px" }}>외 {overdue.length - 4}건…</div>}
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--ink3)", textAlign: "center", padding: "8px 0 4px" }}>
+            마감 임박·지연 업무가 없습니다. 👍
           </div>
         )}
         <div className="modal-footer" style={{ justifyContent: "flex-end" }}>

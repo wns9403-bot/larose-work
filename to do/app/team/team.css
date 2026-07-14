@@ -62,6 +62,12 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .btn-icon-only{background:transparent;color:var(--ink3);border:1px solid var(--border);
   width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;font-size:15px}
 .btn-icon-only:hover{background:var(--rose-soft);border-color:var(--rose);color:var(--rose)}
+/* 마감 임박 알림 벨 + 배지 */
+.h-bell{position:relative;overflow:visible}
+.h-bell-badge{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;padding:0 4px;
+  display:flex;align-items:center;justify-content:center;box-sizing:border-box;
+  background:var(--urgent,#e11d48);color:#fff;border-radius:9px;
+  font-size:10px;font-weight:900;line-height:1;border:1.5px solid var(--card,#fff)}
 
 /* ─── 탭 바 ─── */
 .tab-bar{padding:14px 24px 0;display:flex;gap:2px;background:transparent;overflow-x:auto}
@@ -252,6 +258,34 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .wk-task-item .wt-title{font-weight:700;font-size:12px;color:var(--ink);margin-bottom:3px}
 .wk-task-item small{font-size:11px;color:var(--ink3);font-weight:600}
 
+/* 주간 기간 막대 (담당자 행 × 요일) */
+.wk-grid2{min-width:900px}
+.wk-row2{display:flex;border-bottom:1px solid var(--border2)}
+.wk-row2 .wk-label-cell{width:160px;flex-shrink:0;border-bottom:none}
+.wk-corner2{font-size:12px;font-weight:700;color:var(--ink3)}
+.wk-track{flex:1;position:relative;display:flex;min-width:0}
+.wk-daycol{flex:1;border-right:1px solid var(--border2);min-height:44px;padding:6px 6px}
+.wk-daycol:last-child{border-right:none}
+.wk-daycol.today-col{background:#fffbfd}
+.wk-head-track .wk-daycol,.wk-head-row2 .wk-label-cell{padding:12px 8px;background:var(--surface2);text-align:center;flex-direction:column}
+.wk-th2{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.wk-th2 .th-day{font-size:17px;font-weight:800;color:var(--rose);margin-bottom:2px}
+.wk-th2.today-col{background:var(--rose-soft)}
+.wk-th2.today-col .th-day{color:var(--rose-deep)}
+.wk-th2 .th-date{font-size:12px;font-weight:600;color:var(--ink3)}
+.wk-bars{position:absolute;inset:0;pointer-events:none}
+.wk-bar{position:absolute;height:26px;display:flex;align-items:center;gap:6px;padding:0 9px;
+  border-radius:7px;background:var(--surface);border:1px solid var(--border2);border-left:3px solid;
+  box-shadow:var(--sh-sm);font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;
+  pointer-events:auto;overflow:hidden;transition:var(--transition)}
+.wk-bar:hover{border-color:var(--rose-mid);box-shadow:0 2px 6px rgba(0,0,0,.1)}
+.wk-bar .row-check{width:17px;height:17px;font-size:11px}
+.wk-bar-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wk-bar.done{opacity:.55}
+.wk-bar.done .wk-bar-title{text-decoration:line-through}
+.wk-bar.cl{border-top-left-radius:0;border-bottom-left-radius:0;border-left-width:1px}
+.wk-bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
+
 /* 업무 완료 처리 체크박스 */
 .row-check{flex-shrink:0;width:20px;height:20px;border-radius:6px;
   border:2px solid var(--border2);background:var(--surface);cursor:pointer;
@@ -321,6 +355,40 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
   background:var(--surface2);border-top:1px solid var(--border2)}
 .leg-item{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink2)}
 .leg-dot{width:10px;height:10px;border-radius:50%}
+/* 월간 기간 막대 */
+.cal-grid-rows{display:flex;flex-direction:column}
+.cal-week{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border2)}
+.cal-cell2{border-right:1px solid var(--border2);padding:5px 6px}
+.cal-cell2:nth-child(7n){border-right:none}
+.cal-cell2.other{background:var(--surface2)}
+.cal-cell2.other .cal-date{opacity:.4}
+.cal-cell2.today{background:var(--rose-soft)}
+.cal-cell2.today .cal-date{background:var(--rose);color:#fff!important;border-radius:50%;
+  width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+.cal-cell2.sun .cal-date{color:var(--urgent)}
+.cal-cell2.sat .cal-date{color:var(--blue)}
+.cal-bars{position:absolute;inset:0;pointer-events:none}
+.cal-bar{position:absolute;height:18px;border-radius:5px;padding:0 7px;color:#fff;
+  font-size:11px;font-weight:700;display:flex;align-items:center;overflow:hidden;
+  cursor:pointer;pointer-events:auto;box-shadow:0 1px 2px rgba(0,0,0,.12);transition:opacity var(--transition)}
+.cal-bar:hover{opacity:.82}
+.cal-bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
+.cal-bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
+.cal-bar.done{opacity:.5}
+.cal-bar.done .cal-bar-text{text-decoration:line-through}
+.cal-bar-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 카드 메모 */
+.tc-memo{font-size:11px;color:var(--ink2);background:var(--surface2);border-radius:6px;
+  padding:5px 8px;margin:6px 0 4px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.task-memo{width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;
+  font-size:13px;color:var(--ink);font-family:inherit;background:var(--surface2);resize:vertical;line-height:1.5}
+/* 자동 진행률 (읽기전용) */
+.prog-auto-tag{font-size:9.5px;font-weight:800;color:var(--rose-deep);background:var(--rose-soft);
+  border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle}
+.prog-readonly{gap:8px}
+.prog-readonly .prog-track{flex:1;height:8px;background:var(--surface2);border-radius:99px;overflow:hidden}
+.prog-readonly .prog-fill{height:100%;background:var(--rose);border-radius:99px}
+.prog-readonly b{min-width:38px;text-align:right;font-size:13px;color:var(--ink2)}
 
 /* ─── 대시보드 ─── */
 .dash-header{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;

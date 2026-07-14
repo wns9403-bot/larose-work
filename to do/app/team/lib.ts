@@ -8,8 +8,10 @@ export type Task = {
   priority: string;
   freq: string;
   status: string;
-  due_date: string | null;
-  progress: number;
+  start_date?: string | null;   // 시작일
+  due_date: string | null;       // 마감일
+  memo?: string;                 // 참조/메모
+  progress: number;              // 자동 계산값 저장 (수동 입력 없음)
   created_at?: number;
   updated_at?: number;
   rechecked?: boolean;
@@ -177,7 +179,23 @@ export const memberOf = (members: Member[], n: string): Member =>
   members.find((m) => m.name === n) || { name: n, color: "#999" };
 
 export const clampProgress = (n: unknown) => Math.max(0, Math.min(100, Number(n) || 0));
-export const taskProgress = (t: Task) => (t.status === "완료" ? 100 : clampProgress(t.progress));
+/* 업무 시작일 (미입력 시 등록일) */
+export const taskStart = (t: Task): string | null =>
+  t.start_date || (t.created_at ? ymd(new Date(t.created_at)) : null);
+
+/* 진행률 = 완료 여부. 완료 100% / 미완료 0%.
+   → 팀·개인·매장 평균 진행률은 자동으로 "완료 업무 수 ÷ 전체 업무 수"(완료율)가 된다. */
+export const taskProgress = (t: Task): number => (t.status === "완료" ? 100 : 0);
+
+/* 업무가 특정 날짜에 표시되어야 하는지 (기간 [시작일~마감일] 기준) */
+export function taskOnDay(t: Task, dayStr: string): boolean {
+  const end = t.due_date;
+  const start = taskStart(t);
+  if (end) return (!start || dayStr >= start) && dayStr <= end;
+  if (t.freq === "일일") return true;                   // 마감 없는 일일 = 매일
+  if (start) return dayStr >= start;                    // 시작만 있으면 그 이후 매일
+  return false;
+}
 
 export function uid() {
   return "t_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
@@ -216,6 +234,22 @@ export const isOverdue = (t: Task) => {
   const n = daysLeft(t.due_date);
   return n !== null && n < 0 && t.status !== "완료";
 };
+
+/* 마감 임박: 미완료 & 마감이 D-2 이내(오늘·내일·모레) 또는 이미 지연 */
+export const ALERT_DAYS = 2;
+export const isImminent = (t: Task) => {
+  if (t.status === "완료") return false;
+  const n = daysLeft(t.due_date);
+  return n !== null && n <= ALERT_DAYS;
+};
+/* 역할별 알림 대상 업무. 그룹장=전체, 매니저=본인 담당.
+   임박·지연 업무만, 급한 순(마감 가까운 순)으로 정렬해 반환. */
+export function alertTasks(tasks: Task[], me: string | null, isLeader: boolean): Task[] {
+  const scoped = isLeader ? tasks : tasks.filter((t) => !!me && t.assignee === me);
+  return scoped
+    .filter(isImminent)
+    .sort((a, b) => (daysLeft(a.due_date) ?? 99) - (daysLeft(b.due_date) ?? 99));
+}
 
 export function normalizeStoreRow(s: Partial<Store> & { store?: string; part_lead?: string }): Store {
   return {

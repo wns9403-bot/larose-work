@@ -6,7 +6,7 @@ import "./team.css";
 import {
   Task, Member, Store, Issue, ArchiveEntry, Activity, WeeklyReport,
   DEFAULT_MEMBERS, DEFAULT_STORES, PRIORITIES,
-  normalizeStoreRow, taskProgress, ymd, weekKey, cleanStore,
+  normalizeStoreRow, taskProgress, ymd, weekKey, cleanStore, alertTasks,
 } from "./lib";
 import {
   loadAll, saveDataset, logActivity, loadActivity, subscribeRealtime, getClient, DatasetName,
@@ -72,6 +72,9 @@ export default function TeamBoard() {
 
   const isLeader = me !== null && members.length > 0 && me === members[0].name;
 
+  /* 마감 임박 알림 대상 업무 (그룹장=전체, 매니저=본인 담당) */
+  const alertList = useMemo(() => alertTasks(tasks, me, isLeader), [tasks, me, isLeader]);
+
   /* ─── 초기 로드 ─── */
   useEffect(() => {
     (async () => {
@@ -135,16 +138,16 @@ export default function TeamBoard() {
     }
   }, [members, me, loaded]);
 
-  /* 주간 알림 (로그인 후 주 1회) */
+  /* 마감 임박 자동 알림 (로그인 후 주 1회, 임박·지연 업무가 있을 때만) */
   useEffect(() => {
     if (!me || !loaded) return;
     const key = weekKey();
-    if (localStorage.getItem(LS_WEEKALERT) !== key) {
+    if (localStorage.getItem(LS_WEEKALERT) !== key && alertTasks(tasks, me, isLeader).length > 0) {
       localStorage.setItem(LS_WEEKALERT, key);
       const t = setTimeout(() => setWeeklyAlert(true), 600);
       return () => clearTimeout(t);
     }
-  }, [me, loaded]);
+  }, [me, loaded, tasks, isLeader]);
 
   /* ─── 저장 헬퍼 (상태 + DB + 감사 로그) ─── */
   const commitTasks = useCallback((next: Task[], action: string, target?: string) => {
@@ -390,6 +393,9 @@ export default function TeamBoard() {
               </button>
             </>
           )}
+          <button className="btn btn-icon-only h-bell" title="마감 임박 알림" onClick={() => setWeeklyAlert(true)}>
+            🔔{alertList.length > 0 && <span className="h-bell-badge">{alertList.length > 9 ? "9+" : alertList.length}</span>}
+          </button>
           <button className="btn btn-primary" onClick={() => setTaskModal({ open: true, task: null })}>
             <span className="h-add-full">+ 업무 추가</span>
             <span className="h-add-short">＋</span>
@@ -516,7 +522,7 @@ export default function TeamBoard() {
       )}
       {weeklyAlert && (
         <WeeklyAlertModal tasks={me && !isLeader ? tasks.filter((t) => t.assignee === me) : tasks}
-          onEdit={openTask} onClose={() => setWeeklyAlert(false)} />
+          isLeader={isLeader} onEdit={openTask} onClose={() => setWeeklyAlert(false)} />
       )}
     </div>
   );

@@ -6,7 +6,7 @@ import {
   Task, Member, Store, Issue, MemberStat,
   priOf, freqOf, avatarGlyph, memberOf, taskProgress, ymd, daysLeft, dueLabel,
   fmtDate, isOverdue, storeInfo, memberStats, taskUrgencyRank,
-  scoreMember, scoreGrade, ROUTINES, DAYS_KR, cleanStore,
+  scoreMember, scoreGrade, ROUTINES, DAYS_KR, cleanStore, taskOnDay, taskStart,
 } from "./lib";
 
 /* ─── 공용 소품 ─── */
@@ -45,12 +45,11 @@ export function TaskCard({
         <span className="mini-tag mt-freq">{fl.label}</span>
         {t.store && t.store !== "-" && <span className="mini-tag mt-store">🏬 {t.store}</span>}
         {sinfo.name && sinfo.partLead && <span className="mini-tag mt-store">파트장 {sinfo.partLead}</span>}
-        {t.created_at ? <span className="mini-tag mt-created">✎ {fmtDate(t.created_at)} 등록</span> : null}
-        {t.due_date && (
+        {t.due_date ? (
           <span className={`mini-tag mt-due ${over ? "over" : ""}`}>
-            📅 {t.due_date.slice(5)} {dueLabel(t.due_date)}
+            📅 {taskStart(t) && taskStart(t) !== t.due_date ? `${taskStart(t)!.slice(5)}~` : ""}{t.due_date.slice(5)} {dueLabel(t.due_date)}
           </span>
-        )}
+        ) : (t.created_at ? <span className="mini-tag mt-created">✎ {fmtDate(t.created_at)} 등록</span> : null)}
         {t.status === "완료" && (
           <span
             className={`mini-tag mt-recheck ${t.rechecked ? "ok" : ""}`}
@@ -60,6 +59,7 @@ export function TaskCard({
           </span>
         )}
       </div>
+      {t.memo ? <div className="tc-memo">📝 {t.memo}</div> : null}
       <div className="prog-track"><div className="prog-fill" style={{ width: `${prog}%` }} /></div>
       <div className="prog-label">{prog}%</div>
     </div>
@@ -442,7 +442,7 @@ export function DailyView({
   const todayStr = ymd(viewDate);
   const isToday = todayStr === ymd(new Date());
   const wd = ["일", "월", "화", "수", "목", "금", "토"][viewDate.getDay()];
-  const daily = tasks.filter((t) => t.freq === "일일" || t.due_date === todayStr);
+  const daily = tasks.filter((t) => taskOnDay(t, todayStr));
   const move = (d: number) => { const x = new Date(viewDate); x.setDate(x.getDate() + d); setViewDate(x); };
 
   return (
@@ -528,7 +528,7 @@ export function WeeklyView({
             const dayMembers = members
               .map((m) => ({
                 member: m,
-                items: tasks.filter((t) => t.assignee === m.name && (t.freq === "일일" || t.due_date === dayStr)),
+                items: tasks.filter((t) => t.assignee === m.name && taskOnDay(t, dayStr)),
               }))
               .filter((x) => x.items.length);
             return (
@@ -571,72 +571,100 @@ export function WeeklyView({
             );
           })}
         </div>
-        {/* 데스크톱: 담당자 × 요일 표 */}
+        {/* 데스크톱: 담당자 × 요일 (기간 막대) */}
         <div className="wk-scroll">
-          <div className="wk-table">
-            <div className="wk-corner">담당자</div>
-            {DAYS_KR.map((d, i) => {
-              const dt = dateOf(i);
-              const isT = ymd(dt) === todayStr;
-              return (
-                <div key={d} className={`wk-th ${isT ? "today-col" : ""}`}>
-                  <span className="th-day">{d}</span>
-                  <span className="th-date">{dt.getMonth() + 1}/{dt.getDate()}{isT ? " · 오늘" : ""}</span>
-                </div>
-              );
-            })}
-            <div className="wk-label-cell">
-              <span className="av av-sm" style={{ background: "var(--rose)" }}>루</span>
-              <span className="wk-label-name">고정 루틴</span>
-            </div>
-            {DAYS_KR.map((d) => (
-              <div key={`r-${d}`} className="wk-cell"><span className="routine-chip">{ROUTINES[d]}</span></div>
-            ))}
-            {members.map((m) => (
-              <React.Fragment key={m.name}>
-                <div className="wk-label-cell">
-                  <Avatar m={m} size="sm" />
-                  <span className="wk-label-name">{m.name}</span>
-                </div>
+          <div className="wk-grid2">
+            <div className="wk-row2 wk-head-row2">
+              <div className="wk-label-cell wk-corner2">담당자</div>
+              <div className="wk-track wk-head-track">
                 {DAYS_KR.map((d, i) => {
-                  const dayStr = ymd(dateOf(i));
-                  const isT = dayStr === todayStr;
-                  const items = tasks.filter((t) => t.assignee === m.name && (t.freq === "일일" || t.due_date === dayStr));
+                  const dt = dateOf(i); const isT = ymd(dt) === todayStr;
                   return (
-                    <div key={`${m.name}-${d}`} className={`wk-cell ${isT ? "today-col" : ""}`}>
-                      {items.map((t) => {
-                        const p = priOf(t.priority);
-                        const done = t.status === "완료";
+                    <div key={d} className={`wk-daycol wk-th2 ${isT ? "today-col" : ""}`}>
+                      <span className="th-day">{d}</span>
+                      <span className="th-date">{dt.getMonth() + 1}/{dt.getDate()}{isT ? " · 오늘" : ""}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="wk-row2">
+              <div className="wk-label-cell">
+                <span className="av av-sm" style={{ background: "var(--rose)" }}>루</span>
+                <span className="wk-label-name">고정 루틴</span>
+              </div>
+              <div className="wk-track">
+                {DAYS_KR.map((d, i) => {
+                  const isT = ymd(dateOf(i)) === todayStr;
+                  return <div key={d} className={`wk-daycol ${isT ? "today-col" : ""}`}><span className="routine-chip">{ROUTINES[d]}</span></div>;
+                })}
+              </div>
+            </div>
+            {members.map((m) => {
+              const prevDay = ymd(new Date(monday.getTime() - 864e5));
+              const nextDay = ymd(dateOf(5));
+              const segs = tasks
+                .filter((t) => t.assignee === m.name)
+                .map((t) => {
+                  const flags = DAYS_KR.map((_, i) => taskOnDay(t, ymd(dateOf(i))));
+                  return { t, firstCol: flags.indexOf(true), lastCol: flags.lastIndexOf(true), contL: taskOnDay(t, prevDay), contR: taskOnDay(t, nextDay) };
+                })
+                .filter((s) => s.firstCol >= 0)
+                .sort((a, b) => a.firstCol - b.firstCol || (b.lastCol - b.firstCol) - (a.lastCol - a.firstCol));
+              const laneEnd: number[] = [];
+              const placed = segs.map((s) => {
+                let lane = 0;
+                while (lane < laneEnd.length && laneEnd[lane] >= s.firstCol) lane++;
+                laneEnd[lane] = s.lastCol;
+                return { ...s, lane };
+              });
+              const LANE_H = 30, TOP = 5;
+              const rowH = Math.max(52, TOP + Math.max(1, laneEnd.length) * LANE_H + 4);
+              return (
+                <div key={m.name} className="wk-row2" style={{ minHeight: rowH }}>
+                  <div className="wk-label-cell">
+                    <Avatar m={m} size="sm" />
+                    <span className="wk-label-name">{m.name}</span>
+                  </div>
+                  <div className="wk-track">
+                    {DAYS_KR.map((d, i) => {
+                      const isT = ymd(dateOf(i)) === todayStr;
+                      return <div key={d} className={`wk-daycol ${isT ? "today-col" : ""}`} />;
+                    })}
+                    <div className="wk-bars">
+                      {placed.map(({ t, firstCol, lastCol, contL, contR, lane }) => {
+                        const p = priOf(t.priority); const done = t.status === "완료";
                         return (
-                          <div key={t.id} className="wk-task-item" style={{ borderLeftColor: p.color }} onClick={() => onEdit(t)}>
-                            <button
-                              className={`row-check ${done ? "checked" : ""}`}
-                              title={done ? "완료 취소" : "완료 처리"}
-                              onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}
-                            >
-                              {done ? "✓" : ""}
-                            </button>
-                            <div style={{ minWidth: 0 }}>
-                              <div className="wt-title">{t.title}</div>
-                              <small>{p.label} · {t.status}</small>
-                            </div>
+                          <div
+                            key={t.id}
+                            className={`wk-bar ${contL ? "cl" : ""} ${contR ? "cr" : ""} ${done ? "done" : ""}`}
+                            style={{
+                              left: `calc(${(firstCol / DAYS_KR.length) * 100}% + 3px)`,
+                              width: `calc(${((lastCol - firstCol + 1) / DAYS_KR.length) * 100}% - 6px)`,
+                              top: TOP + lane * LANE_H, borderLeftColor: p.color,
+                            }}
+                            onClick={() => onEdit(t)}
+                            title={`${t.title} · ${p.label} · ${t.status}`}
+                          >
+                            <button className={`row-check ${done ? "checked" : ""}`} onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}>{done ? "✓" : ""}</button>
+                            <span className="wk-bar-title">{contL ? "‹ " : ""}{t.title}{contR ? " ›" : ""}</span>
                           </div>
                         );
                       })}
                     </div>
-                  );
-                })}
-              </React.Fragment>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="wk-note">📌 마감일 기준으로 해당 요일에 표시 · 일일 업무는 매일 표시됩니다</div>
+        <div className="wk-note">📌 시작일~마감일 기간이 담당자 행에 막대로 이어져 표시됩니다 · 막대를 누르면 수정</div>
       </div>
     </section>
   );
 }
 
-/* ─── ⑤ 월간 캘린더 ─── */
+/* ─── ⑤ 월간 캘린더 (기간 막대) ─── */
 export function MonthlyView({
   members, tasks, viewMonth, setViewMonth, onEdit,
 }: {
@@ -645,63 +673,29 @@ export function MonthlyView({
 }) {
   const yr = viewMonth.getFullYear(), mo = viewMonth.getMonth();
   const todayStr = ymd(new Date());
-  const firstDay = new Date(yr, mo, 1);
-  const lastDay = new Date(yr, mo + 1, 0);
-  const sundayStart = firstDay.getDay();
-
-  const byDate: Record<string, Task[]> = {};
-  tasks.filter((t) => t.freq !== "일일").forEach((t) => {
-    if (!t.due_date) return;
-    (byDate[t.due_date] = byDate[t.due_date] || []).push(t);
-  });
-  const dailyList = tasks.filter((t) => t.freq === "일일");
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    const key = `${yr}-${String(mo + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    if (dailyList.length) {
-      byDate[key] = byDate[key] || [];
-      dailyList.forEach((t) => { if (!byDate[key].find((x) => x.id === t.id)) byDate[key].push(t); });
-    }
-  }
-
-  const cells: React.ReactNode[] = [];
-  for (let i = 0; i < sundayStart; i++) {
-    const pd = new Date(yr, mo, 1 - sundayStart + i);
-    cells.push(<div key={`p${i}`} className="cal-cell other"><span className="cal-date">{pd.getDate()}</span></div>);
-  }
-  const LIMIT = 3;
-  for (let d = 1; d <= lastDay.getDate(); d++) {
-    const dateStr = `${yr}-${String(mo + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const dw = new Date(yr, mo, d).getDay();
-    const isT = dateStr === todayStr;
-    const dtasks = byDate[dateStr] || [];
-    cells.push(
-      <div key={dateStr} className={`cal-cell ${isT ? "today" : ""} ${dw === 0 ? "sun" : ""} ${dw === 6 ? "sat" : ""}`}>
-        <span className="cal-date">{d}</span>
-        {dtasks.slice(0, LIMIT).map((t) => {
-          const m = memberOf(members, t.assignee);
-          const p = priOf(t.priority);
-          return (
-            <span
-              key={t.id} className="cal-evt"
-              title={`${t.title} · ${t.assignee} · ${p.label}`}
-              style={{ background: `${m.color}22`, borderLeftColor: m.color }}
-              onClick={() => onEdit(t)}
-            >
-              <span className="cal-evt-dot" style={{ background: p.color }} />
-              <span className="cal-evt-text" style={{ color: m.color }}>{t.title}</span>
-            </span>
-          );
-        })}
-        {dtasks.length > LIMIT && <span className="cal-more">+{dtasks.length - LIMIT}개 더</span>}
-      </div>
-    );
-  }
-  const totalCells = sundayStart + lastDay.getDate();
-  const remain = (7 - (totalCells % 7)) % 7;
-  for (let i = 1; i <= remain; i++) {
-    cells.push(<div key={`n${i}`} className="cal-cell other"><span className="cal-date">{i}</span></div>);
-  }
+  const sundayStart = new Date(yr, mo, 1).getDay();
   const moveMonth = (d: number) => setViewMonth(new Date(yr, mo + d, 1));
+
+  /* 6주 × 7일 날짜 격자 */
+  const gridStart = new Date(yr, mo, 1 - sundayStart);
+  const weeks: { date: Date; dateStr: string; inMonth: boolean }[][] = [];
+  for (let w = 0; w < 6; w++) {
+    const row = [];
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date(gridStart); dt.setDate(gridStart.getDate() + w * 7 + d);
+      row.push({ date: dt, dateStr: ymd(dt), inMonth: dt.getMonth() === mo });
+    }
+    weeks.push(row);
+  }
+
+  /* 기간이 있는 업무 (마감일 기준, 시작일 있으면 시작~마감) */
+  const spans = tasks.filter((t) => t.due_date).map((t) => {
+    const end = t.due_date!;
+    const start = t.start_date && t.start_date <= end ? t.start_date : end;
+    return { t, start, end };
+  });
+
+  const LANE_H = 20, TOP = 22;
 
   return (
     <section>
@@ -720,7 +714,67 @@ export function MonthlyView({
         <div className="cal-week-head">
           {["일", "월", "화", "수", "목", "금", "토"].map((d) => <div key={d} className="cwh-cell">{d}</div>)}
         </div>
-        <div className="cal-grid">{cells}</div>
+        <div className="cal-grid-rows">
+          {weeks.map((row, wi) => {
+            const wStart = row[0].dateStr, wEnd = row[6].dateStr;
+            const segs = spans
+              .filter((sp) => sp.end >= wStart && sp.start <= wEnd)
+              .map((sp) => {
+                const segS = sp.start < wStart ? wStart : sp.start;
+                const segE = sp.end > wEnd ? wEnd : sp.end;
+                return {
+                  sp,
+                  colS: row.findIndex((c) => c.dateStr === segS),
+                  colE: row.findIndex((c) => c.dateStr === segE),
+                  contL: sp.start < wStart, contR: sp.end > wEnd,
+                };
+              })
+              .sort((a, b) => a.colS - b.colS || (b.colE - b.colS) - (a.colE - a.colS));
+            /* 레인 배치 (겹치지 않게 쌓기) */
+            const laneEnd: number[] = [];
+            const placed = segs.map((s) => {
+              let lane = 0;
+              while (lane < laneEnd.length && laneEnd[lane] >= s.colS) lane++;
+              laneEnd[lane] = s.colE;
+              return { ...s, lane };
+            });
+            const rowH = Math.max(46, TOP + laneEnd.length * LANE_H + 4);
+            return (
+              <div key={wi} className="cal-week" style={{ minHeight: rowH }}>
+                {row.map((c) => {
+                  const dw = c.date.getDay();
+                  return (
+                    <div key={c.dateStr} className={`cal-cell2 ${c.inMonth ? "" : "other"} ${c.dateStr === todayStr ? "today" : ""} ${dw === 0 ? "sun" : ""} ${dw === 6 ? "sat" : ""}`}>
+                      <span className="cal-date">{c.date.getDate()}</span>
+                    </div>
+                  );
+                })}
+                <div className="cal-bars">
+                  {placed.map(({ sp, colS, colE, contL, contR, lane }) => {
+                    const m = memberOf(members, sp.t.assignee);
+                    const done = sp.t.status === "완료";
+                    return (
+                      <div
+                        key={sp.t.id}
+                        className={`cal-bar ${contL ? "cl" : ""} ${contR ? "cr" : ""} ${done ? "done" : ""}`}
+                        style={{
+                          left: `calc(${(colS / 7) * 100}% + 3px)`,
+                          width: `calc(${((colE - colS + 1) / 7) * 100}% - 6px)`,
+                          top: TOP + lane * LANE_H,
+                          background: m.color,
+                        }}
+                        title={`${sp.t.title} · ${sp.t.assignee}${sp.start !== sp.end ? ` · ${sp.start.slice(5)}~${sp.end.slice(5)}` : ""}`}
+                        onClick={() => onEdit(sp.t)}
+                      >
+                        <span className="cal-bar-text">{contL ? "‹ " : ""}{sp.t.title}{contR ? " ›" : ""}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
         <div className="cal-legend">
           {members.map((m) => (
             <div key={m.name} className="leg-item">
@@ -729,6 +783,7 @@ export function MonthlyView({
             </div>
           ))}
         </div>
+        <div className="wk-note" style={{ borderTop: "1px solid var(--border2)" }}>📌 시작일~마감일 기간이 막대로 이어져 표시됩니다 · 막대를 누르면 수정</div>
       </div>
     </section>
   );
