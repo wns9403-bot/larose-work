@@ -6,22 +6,26 @@ import "./team.css";
 import {
   Task, Member, Store, Issue, ArchiveEntry, Activity, WeeklyReport,
   DEFAULT_MEMBERS, DEFAULT_STORES, PRIORITIES,
-  normalizeStoreRow, taskProgress, ymd, weekKey, cleanStore, alertTasks,
+  normalizeStoreRow, taskProgress, ymd, weekKey, cleanStore, alertTasks, uid,
+  pendingConfirms, dueTimestamp,
 } from "./lib";
 import {
   loadAll, saveDataset, logActivity, loadActivity, subscribeRealtime, getClient, DatasetName,
 } from "./db";
 import {
-  DashboardView, TeamDetailView, DailyView, WeeklyView, MonthlyView, StoresView,
+  DashboardView, TeamDetailView, DailyView, WeeklyView, MonthlyView, StoresView, QuickMemoBar,
 } from "./views";
 import { WeeklyReportView } from "./weeklyReport";
 import {
   TaskModal, MemberSettingsModal, StoreSettingsModal, IssueModal,
   ArchiveModal, WeeklyAlertModal, ActivityModal, LoginGate,
+  ConfirmModal, NotifySettingsModal,
 } from "./modals";
 
 const LS_SESSION = "larose_session_v1";
 const LS_WEEKALERT = "larose_week_alert_v1";
+const LS_NOTIFY_LEAD = "larose_notify_lead_v1";
+const LS_NOTIFIED = "larose_notified_v1";
 
 type TabKey = "dashboard" | "team" | "daily" | "weekly" | "monthly" | "stores" | "weeklyReport";
 const TABS: { key: TabKey; icon: string; label: string }[] = [
@@ -68,12 +72,58 @@ export default function TeamBoard() {
   const [archiveModal, setArchiveModal] = useState(false);
   const [activityModal, setActivityModal] = useState(false);
   const [weeklyAlert, setWeeklyAlert] = useState(false);
+  const [confirmModal, setConfirmModal] = useState(false);
+  const [notifySettings, setNotifySettings] = useState(false);
+  const [notifyLead, setNotifyLead] = useState(10);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const isLeader = me !== null && members.length > 0 && me === members[0].name;
 
   /* 마감 임박 알림 대상 업무 (그룹장=전체, 매니저=본인 담당) */
   const alertList = useMemo(() => alertTasks(tasks, me, isLeader), [tasks, me, isLeader]);
+  /* 그룹장 컨펌 대기 업무 */
+  const confirmList = useMemo(() => pendingConfirms(tasks, me, isLeader), [tasks, me, isLeader]);
+
+  /* 알림 설정 불러오기 (기기별 localStorage) */
+  useEffect(() => {
+    const saved = localStorage.getItem(LS_NOTIFY_LEAD);
+    if (saved) setNotifyLead(parseInt(saved, 10) || 10);
+  }, []);
+  const saveNotifyLead = (n: number) => {
+    setNotifyLead(n);
+    localStorage.setItem(LS_NOTIFY_LEAD, String(n));
+    setNotifySettings(false);
+  };
+
+  /* 마감 시간 N분 전 브라우저 알림 (탭이 열려 있는 동안, 내 담당 업무만) */
+  useEffect(() => {
+    if (!me) return;
+    const check = () => {
+      if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
+      let notified: string[] = [];
+      try { notified = JSON.parse(localStorage.getItem(LS_NOTIFIED) || "[]"); } catch {}
+      const now = Date.now();
+      const leadMs = notifyLead * 60000;
+      let changed = false;
+      tasks.forEach((t) => {
+        if (t.assignee !== me || t.status === "완료") return;
+        const due = dueTimestamp(t);
+        if (due === null) return;
+        const key = `${t.id}:${t.due_date}:${t.due_time}`;
+        if (notified.includes(key)) return;
+        if (due - leadMs <= now) {
+          notified.push(key); changed = true;
+          const mins = Math.round((due - now) / 60000);
+          const when = mins > 0 ? `${mins}분 뒤` : mins === 0 ? "지금" : "마감 지남";
+          new Notification(`⏰ ${t.title}`, { body: `${when} · 마감 ${t.due_date} ${t.due_time}` });
+        }
+      });
+      if (changed) localStorage.setItem(LS_NOTIFIED, JSON.stringify(notified.slice(-300)));
+    };
+    check();
+    const iv = setInterval(check, 30000);
+    return () => clearInterval(iv);
+  }, [tasks, me, notifyLead]);
 
   /* ─── 초기 로드 ─── */
   useEffect(() => {
@@ -196,6 +246,36 @@ export default function TeamBoard() {
       };
     });
     commitTasks(next, toComplete ? "업무를 완료 처리했습니다" : "완료 처리를 취소했습니다", target.title);
+  };
+  /* ─── 빠른 메모 (제목만으로 즉석 등록 → 나중에 드래그/편집으로 상세 반영) ─── */
+  const addQuickMemo = (title: string) => {
+    if (!title.trim() || !me) return;
+    const t: Task = {
+      id: uid(), title: title.trim(), assignee: me, store: "-",
+      priority: "중요", freq: "비정기", status: "대기",
+      start_date: null, due_date: null, due_time: null, memo: "",
+      quick: true, progress: 0,
+      created_at: Date.now(), created_by: me,
+    };
+    commitTasks([...tasks, t], "빠른 메모를 추가했습니다", t.title);
+  };
+  const assignQuickToDate = (id: string, dateStr: string) => {
+    let title = "";
+    const next = tasks.map((t) => {
+      if (t.id !== id) return t;
+      title = t.title;
+      return { ...t, due_date: dateStr, quick: false, updated_at: Date.now(), updated_by: me || undefined };
+    });
+    commitTasks(next, "빠른 메모를 날짜에 배정했습니다", `${title} → ${dateStr}`);
+  };
+  const confirmTask = (id: string) => {
+    let title = "";
+    const next = tasks.map((t) => {
+      if (t.id !== id) return t;
+      title = t.title;
+      return { ...t, confirmed: true, confirmed_at: Date.now(), confirmed_by: me || undefined, updated_at: Date.now(), updated_by: me || undefined };
+    });
+    commitTasks(next, "컨펌 요청을 승인했습니다", title);
   };
   const recheckTask = (id: string) => {
     let title = "", now = false;
@@ -320,6 +400,9 @@ export default function TeamBoard() {
     return true;
   }), [tasks, priFilter, onlyMine, me, storeFilter]);
 
+  /* 빠른 메모: 아직 날짜/상세가 채워지지 않은 즉석 등록 항목 */
+  const quickMemos = useMemo(() => tasks.filter((t) => t.quick), [tasks]);
+
   /* 배지 */
   const todayStr = ymd(viewDate);
   const dailyCnt = filtered.filter((t) => t.freq === "일일" || t.due_date === todayStr).length;
@@ -396,6 +479,10 @@ export default function TeamBoard() {
           <button className="btn btn-icon-only h-bell" title="마감 임박 알림" onClick={() => setWeeklyAlert(true)}>
             🔔{alertList.length > 0 && <span className="h-bell-badge">{alertList.length > 9 ? "9+" : alertList.length}</span>}
           </button>
+          <button className="btn btn-icon-only h-bell h-desktop-only" title="그룹장 컨펌 요청" onClick={() => setConfirmModal(true)}>
+            🙋{confirmList.length > 0 && <span className="h-bell-badge">{confirmList.length > 9 ? "9+" : confirmList.length}</span>}
+          </button>
+          <button className="btn btn-icon-only h-desktop-only" title="알림 설정" onClick={() => setNotifySettings(true)}>⏰</button>
           <button className="btn btn-primary" onClick={() => setTaskModal({ open: true, task: null })}>
             <span className="h-add-full">+ 업무 추가</span>
             <span className="h-add-short">＋</span>
@@ -410,6 +497,10 @@ export default function TeamBoard() {
                 <div className="h-more-backdrop" onClick={() => setMoreOpen(false)} />
                 <div className="h-more-menu">
                   <button onClick={() => { setActivityModal(true); setMoreOpen(false); }}>🕘 변경 기록</button>
+                  <button onClick={() => { setConfirmModal(true); setMoreOpen(false); }}>
+                    🙋 그룹장 컨펌 요청{confirmList.length > 0 ? ` (${confirmList.length})` : ""}
+                  </button>
+                  <button onClick={() => { setNotifySettings(true); setMoreOpen(false); }}>⏰ 알림 설정</button>
                   {isLeader && (
                     <>
                       <button onClick={() => { setStoreModal(true); setMoreOpen(false); }}>🏬 매장 설정</button>
@@ -435,6 +526,7 @@ export default function TeamBoard() {
       </div>
 
       <div className="tb-main">
+        <QuickMemoBar tasks={quickMemos} onAdd={addQuickMemo} onEdit={openTask} onDelete={deleteTask} />
         {/* 필터 바 */}
         <div className="filter-bar">
           <div className="filter-chips">
@@ -469,7 +561,8 @@ export default function TeamBoard() {
           )}
           {tab === "monthly" && (
             <MonthlyView members={members} tasks={filtered}
-              viewMonth={viewMonth} setViewMonth={setViewMonth} onEdit={openTask} />
+              viewMonth={viewMonth} setViewMonth={setViewMonth} onEdit={openTask}
+              onDropAssign={assignQuickToDate} />
           )}
           {tab === "stores" && (
             <StoresView stores={stores} tasks={tasks} issues={issues}
@@ -523,6 +616,13 @@ export default function TeamBoard() {
       {weeklyAlert && (
         <WeeklyAlertModal tasks={me && !isLeader ? tasks.filter((t) => t.assignee === me) : tasks}
           isLeader={isLeader} onEdit={openTask} onClose={() => setWeeklyAlert(false)} />
+      )}
+      {confirmModal && (
+        <ConfirmModal tasks={confirmList} isLeader={isLeader}
+          onConfirm={confirmTask} onEdit={openTask} onClose={() => setConfirmModal(false)} />
+      )}
+      {notifySettings && (
+        <NotifySettingsModal leadMinutes={notifyLead} onSaveLead={saveNotifyLead} onClose={() => setNotifySettings(false)} />
       )}
     </div>
   );

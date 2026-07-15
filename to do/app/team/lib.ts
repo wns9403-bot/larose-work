@@ -10,7 +10,14 @@ export type Task = {
   status: string;
   start_date?: string | null;   // 시작일
   due_date: string | null;       // 마감일
+  due_time?: string | null;      // 마감 시간 (HH:MM, 선택)
   memo?: string;                 // 참조/메모
+  quick?: boolean;                // 빠른 메모 (아직 상세 미입력) 여부
+  needsConfirm?: boolean;          // 그룹장 컨펌 필요 여부
+  confirmDeadline?: string | null; // 컨펌 기한 (이 날짜까지 그룹장이 확인해야 함)
+  confirmed?: boolean;             // 그룹장 컨펌 완료 여부
+  confirmed_at?: number | null;
+  confirmed_by?: string;
   progress: number;              // 자동 계산값 저장 (수동 입력 없음)
   created_at?: number;
   updated_at?: number;
@@ -249,6 +256,21 @@ export function alertTasks(tasks: Task[], me: string | null, isLeader: boolean):
   return scoped
     .filter(isImminent)
     .sort((a, b) => (daysLeft(a.due_date) ?? 99) - (daysLeft(b.due_date) ?? 99));
+}
+
+/* 그룹장 컨펌 대기 업무. 그룹장=전체 대기 목록, 매니저=본인이 요청한 건의 대기 현황.
+   컨펌 기한이 가까운 순으로 정렬. */
+export function pendingConfirms(tasks: Task[], me: string | null, isLeader: boolean): Task[] {
+  const need = tasks.filter((t) => t.needsConfirm && !t.confirmed);
+  const scoped = isLeader ? need : need.filter((t) => !!me && t.assignee === me);
+  return scoped.sort((a, b) => (daysLeft(a.confirmDeadline) ?? 99) - (daysLeft(b.confirmDeadline) ?? 99));
+}
+
+/* 업무의 마감 날짜+시간을 하나의 타임스탬프로 (시간 미지정 시 null) */
+export function dueTimestamp(t: Task): number | null {
+  if (!t.due_date || !t.due_time) return null;
+  const d = new Date(`${t.due_date}T${t.due_time}:00`);
+  return isNaN(d.getTime()) ? null : d.getTime();
 }
 
 export function normalizeStoreRow(s: Partial<Store> & { store?: string; part_lead?: string }): Store {

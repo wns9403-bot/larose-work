@@ -47,9 +47,14 @@ export function TaskCard({
         {sinfo.name && sinfo.partLead && <span className="mini-tag mt-store">파트장 {sinfo.partLead}</span>}
         {t.due_date ? (
           <span className={`mini-tag mt-due ${over ? "over" : ""}`}>
-            📅 {taskStart(t) && taskStart(t) !== t.due_date ? `${taskStart(t)!.slice(5)}~` : ""}{t.due_date.slice(5)} {dueLabel(t.due_date)}
+            📅 {taskStart(t) && taskStart(t) !== t.due_date ? `${taskStart(t)!.slice(5)}~` : ""}{t.due_date.slice(5)}{t.due_time ? ` ${t.due_time}` : ""} {dueLabel(t.due_date)}
           </span>
         ) : (t.created_at ? <span className="mini-tag mt-created">✎ {fmtDate(t.created_at)} 등록</span> : null)}
+        {t.needsConfirm && (
+          <span className={`mini-tag mt-confirm ${t.confirmed ? "ok" : ""}`}>
+            {t.confirmed ? "✅ 컨펌완료" : `🙋 컨펌대기${t.confirmDeadline ? ` ${dueLabel(t.confirmDeadline)}` : ""}`}
+          </span>
+        )}
         {t.status === "완료" && (
           <span
             className={`mini-tag mt-recheck ${t.rechecked ? "ok" : ""}`}
@@ -66,13 +71,59 @@ export function TaskCard({
   );
 }
 
+/* ─── 빠른 메모 (제목만 즉석 등록 → 드래그로 날짜 배정하거나 클릭해 상세 입력) ─── */
+export function QuickMemoBar({
+  tasks, onAdd, onEdit, onDelete,
+}: { tasks: Task[]; onAdd: (title: string) => void; onEdit: (t: Task) => void; onDelete: (id: string) => void }) {
+  const [val, setVal] = React.useState("");
+  const submit = () => {
+    if (!val.trim()) return;
+    onAdd(val);
+    setVal("");
+  };
+  return (
+    <div className="qm-bar">
+      <div className="qm-input-row">
+        <span className="qm-icon">🗒️</span>
+        <input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="급하게 메모만 먼저... (예: 배송 지연 건 확인) · Enter로 추가"
+        />
+        <button className="btn btn-ghost qm-add-btn" onClick={submit}>+ 메모</button>
+      </div>
+      {tasks.length > 0 && (
+        <div className="qm-chips">
+          {tasks.map((t) => (
+            <div
+              key={t.id}
+              className="qm-chip"
+              draggable
+              onDragStart={(e) => { e.dataTransfer.setData("text/task-id", t.id); e.dataTransfer.effectAllowed = "move"; }}
+              onClick={() => onEdit(t)}
+              title="드래그해서 월간 캘린더 날짜에 배정하거나, 클릭해서 상세 입력"
+            >
+              <span className="qm-chip-text">{t.title}</span>
+              <button className="qm-chip-del" onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {tasks.length > 0 && (
+        <div className="qm-hint">📌 메모를 드래그해 월간 캘린더 날짜에 놓으면 자동 배정돼요 · 클릭하면 담당자·기한 등 상세 입력</div>
+      )}
+    </div>
+  );
+}
+
 function DashTaskRow({
   t, showAssignee, onEdit, onComplete,
 }: {
   t: Task; showAssignee: boolean; onEdit: (t: Task) => void; onComplete?: (id: string) => void;
 }) {
   const p = priOf(t.priority);
-  const due = t.due_date ? ` · ${dueLabel(t.due_date)}` : "";
+  const due = t.due_date ? ` · ${t.due_time ? `${t.due_time} · ` : ""}${dueLabel(t.due_date)}` : "";
   const storeText = t.store && t.store !== "-" ? ` · ${t.store}` : "";
   const done = t.status === "완료";
   return (
@@ -461,7 +512,7 @@ export function DailyView({
       <div className="daily-grid">
         {members.map((m) => {
           const list = daily.filter((t) => t.assignee === m.name)
-            .sort((a, b) => priOf(a.priority).rank - priOf(b.priority).rank);
+            .sort((a, b) => priOf(a.priority).rank - priOf(b.priority).rank || (a.due_time || "99:99").localeCompare(b.due_time || "99:99"));
           const done = list.filter((t) => t.status === "완료").length;
           return (
             <div key={m.name} className="daily-col">
@@ -644,7 +695,7 @@ export function WeeklyView({
                               top: TOP + lane * LANE_H, borderLeftColor: p.color,
                             }}
                             onClick={() => onEdit(t)}
-                            title={`${t.title} · ${p.label} · ${t.status}`}
+                            title={`${t.title} · ${p.label} · ${t.status}${t.due_time ? ` · ${t.due_time}` : ""}`}
                           >
                             <button className={`row-check ${done ? "checked" : ""}`} onClick={(e) => { e.stopPropagation(); onComplete(t.id); }}>{done ? "✓" : ""}</button>
                             <span className="wk-bar-title">{contL ? "‹ " : ""}{t.title}{contR ? " ›" : ""}</span>
@@ -666,14 +717,16 @@ export function WeeklyView({
 
 /* ─── ⑤ 월간 캘린더 (기간 막대) ─── */
 export function MonthlyView({
-  members, tasks, viewMonth, setViewMonth, onEdit,
+  members, tasks, viewMonth, setViewMonth, onEdit, onDropAssign,
 }: {
   members: Member[]; tasks: Task[];
   viewMonth: Date; setViewMonth: (d: Date) => void; onEdit: (t: Task) => void;
+  onDropAssign?: (id: string, dateStr: string) => void;
 }) {
   const yr = viewMonth.getFullYear(), mo = viewMonth.getMonth();
   const todayStr = ymd(new Date());
   const sundayStart = new Date(yr, mo, 1).getDay();
+  const [dragOverDate, setDragOverDate] = React.useState<string | null>(null);
   const moveMonth = (d: number) => setViewMonth(new Date(yr, mo + d, 1));
 
   /* 6주 × 7일 날짜 격자 */
@@ -695,7 +748,36 @@ export function MonthlyView({
     return { t, start, end };
   });
 
-  const LANE_H = 20, TOP = 22;
+  const LANE_H = 24, TOP = 30, MAX_LANES = 4;
+
+  /* 주별 세그먼트 + 레인 배치를 먼저 계산 (전체 최대 레인 수로 행 높이를 통일해 격자를 가지런히 유지) */
+  const weekData = weeks.map((row) => {
+    const wStart = row[0].dateStr, wEnd = row[6].dateStr;
+    const segs = spans
+      .filter((sp) => sp.end >= wStart && sp.start <= wEnd)
+      .map((sp) => {
+        const segS = sp.start < wStart ? wStart : sp.start;
+        const segE = sp.end > wEnd ? wEnd : sp.end;
+        return {
+          sp,
+          colS: row.findIndex((c) => c.dateStr === segS),
+          colE: row.findIndex((c) => c.dateStr === segE),
+          contL: sp.start < wStart, contR: sp.end > wEnd,
+        };
+      })
+      .sort((a, b) => a.colS - b.colS || (b.colE - b.colS) - (a.colE - a.colS));
+    /* 레인 배치 (겹치지 않게 쌓기) */
+    const laneEnd: number[] = [];
+    const placed = segs.map((s) => {
+      let lane = 0;
+      while (lane < laneEnd.length && laneEnd[lane] >= s.colS) lane++;
+      laneEnd[lane] = s.colE;
+      return { ...s, lane };
+    });
+    return { row, wStart, wEnd, placed, laneCount: laneEnd.length };
+  });
+  const visibleLanes = Math.min(MAX_LANES, Math.max(1, ...weekData.map((w) => w.laneCount)));
+  const rowH = TOP + visibleLanes * LANE_H + 10;
 
   return (
     <section>
@@ -703,6 +785,14 @@ export function MonthlyView({
         <div>
           <span className="mh-month">{mo + 1}월</span>
           <span className="mh-year">{yr}년</span>
+        </div>
+        <div className="cal-legend cal-legend-top">
+          {members.map((m) => (
+            <div key={m.name} className="leg-item">
+              <span className="leg-dot" style={{ background: m.color }} />
+              <span>{m.name}</span>
+            </div>
+          ))}
         </div>
         <div className="mh-nav">
           <button className="btn btn-ghost" style={{ fontSize: 12, padding: "6px 11px" }} onClick={() => moveMonth(-1)}>◀ 이전</button>
@@ -712,45 +802,36 @@ export function MonthlyView({
       </div>
       <div className="cal-board">
         <div className="cal-week-head">
-          {["일", "월", "화", "수", "목", "금", "토"].map((d) => <div key={d} className="cwh-cell">{d}</div>)}
+          {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+            <div key={d} className={`cwh-cell ${i === 0 ? "sun" : ""} ${i === 6 ? "sat" : ""}`}>{d}</div>
+          ))}
         </div>
         <div className="cal-grid-rows">
-          {weeks.map((row, wi) => {
-            const wStart = row[0].dateStr, wEnd = row[6].dateStr;
-            const segs = spans
-              .filter((sp) => sp.end >= wStart && sp.start <= wEnd)
-              .map((sp) => {
-                const segS = sp.start < wStart ? wStart : sp.start;
-                const segE = sp.end > wEnd ? wEnd : sp.end;
-                return {
-                  sp,
-                  colS: row.findIndex((c) => c.dateStr === segS),
-                  colE: row.findIndex((c) => c.dateStr === segE),
-                  contL: sp.start < wStart, contR: sp.end > wEnd,
-                };
-              })
-              .sort((a, b) => a.colS - b.colS || (b.colE - b.colS) - (a.colE - a.colS));
-            /* 레인 배치 (겹치지 않게 쌓기) */
-            const laneEnd: number[] = [];
-            const placed = segs.map((s) => {
-              let lane = 0;
-              while (lane < laneEnd.length && laneEnd[lane] >= s.colS) lane++;
-              laneEnd[lane] = s.colE;
-              return { ...s, lane };
-            });
-            const rowH = Math.max(46, TOP + laneEnd.length * LANE_H + 4);
+          {weekData.map(({ row, placed, laneCount }, wi) => {
+            const overflow = laneCount - visibleLanes;
             return (
-              <div key={wi} className="cal-week" style={{ minHeight: rowH }}>
+              <div key={wi} className="cal-week" style={{ height: rowH }}>
                 {row.map((c) => {
                   const dw = c.date.getDay();
                   return (
-                    <div key={c.dateStr} className={`cal-cell2 ${c.inMonth ? "" : "other"} ${c.dateStr === todayStr ? "today" : ""} ${dw === 0 ? "sun" : ""} ${dw === 6 ? "sat" : ""}`}>
+                    <div
+                      key={c.dateStr}
+                      className={`cal-cell2 ${c.inMonth ? "" : "other"} ${c.dateStr === todayStr ? "today" : ""} ${dw === 0 ? "sun" : ""} ${dw === 6 ? "sat" : ""} ${dragOverDate === c.dateStr ? "drop-hover" : ""}`}
+                      onDragOver={onDropAssign ? (e) => { e.preventDefault(); setDragOverDate(c.dateStr); } : undefined}
+                      onDragLeave={onDropAssign ? () => setDragOverDate((d) => (d === c.dateStr ? null : d)) : undefined}
+                      onDrop={onDropAssign ? (e) => {
+                        e.preventDefault();
+                        const id = e.dataTransfer.getData("text/task-id");
+                        if (id) onDropAssign(id, c.dateStr);
+                        setDragOverDate(null);
+                      } : undefined}
+                    >
                       <span className="cal-date">{c.date.getDate()}</span>
                     </div>
                   );
                 })}
                 <div className="cal-bars">
-                  {placed.map(({ sp, colS, colE, contL, contR, lane }) => {
+                  {placed.filter((p) => p.lane < visibleLanes).map(({ sp, colS, colE, contL, contR, lane }) => {
                     const m = memberOf(members, sp.t.assignee);
                     const done = sp.t.status === "완료";
                     return (
@@ -763,25 +844,21 @@ export function MonthlyView({
                           top: TOP + lane * LANE_H,
                           background: m.color,
                         }}
-                        title={`${sp.t.title} · ${sp.t.assignee}${sp.start !== sp.end ? ` · ${sp.start.slice(5)}~${sp.end.slice(5)}` : ""}`}
+                        title={`${sp.t.title} · ${sp.t.assignee}${sp.start !== sp.end ? ` · ${sp.start.slice(5)}~${sp.end.slice(5)}` : ""}${sp.t.due_time ? ` · ${sp.t.due_time}` : ""}`}
                         onClick={() => onEdit(sp.t)}
                       >
-                        <span className="cal-bar-text">{contL ? "‹ " : ""}{sp.t.title}{contR ? " ›" : ""}</span>
+                        <span className="cal-bar-dot" style={{ background: done ? "rgba(255,255,255,.6)" : "#fff" }} />
+                        <span className="cal-bar-text">{contL ? "‹ " : ""}{sp.start === sp.end && sp.t.due_time ? `${sp.t.due_time} ` : ""}{sp.t.title}{contR ? " ›" : ""}</span>
                       </div>
                     );
                   })}
+                  {overflow > 0 && (
+                    <div className="cal-more2" style={{ top: TOP + visibleLanes * LANE_H }}>+{overflow}건 더보기</div>
+                  )}
                 </div>
               </div>
             );
           })}
-        </div>
-        <div className="cal-legend">
-          {members.map((m) => (
-            <div key={m.name} className="leg-item">
-              <span className="leg-dot" style={{ background: m.color }} />
-              <span>{m.name}</span>
-            </div>
-          ))}
         </div>
         <div className="wk-note" style={{ borderTop: "1px solid var(--border2)" }}>📌 시작일~마감일 기간이 막대로 이어져 표시됩니다 · 막대를 누르면 수정</div>
       </div>

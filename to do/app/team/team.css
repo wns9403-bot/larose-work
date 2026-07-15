@@ -86,6 +86,28 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .tb-main{padding:16px 24px 80px}
 .work-area{min-width:0}
 
+/* ─── 빠른 메모 바 ─── */
+.qm-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--rad-lg);
+  padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh-sm)}
+.qm-input-row{display:flex;align-items:center;gap:8px}
+.qm-icon{font-size:15px;flex-shrink:0}
+.qm-input-row input{flex:1;font-family:inherit;font-size:13.5px;padding:9px 12px;
+  border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--ink)}
+.qm-input-row input:focus{outline:none;border-color:var(--rose-mid);background:var(--surface)}
+.qm-add-btn{flex-shrink:0;font-size:12.5px;padding:8px 14px}
+.qm-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.qm-chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+  padding:6px 6px 6px 12px;border-radius:999px;border:1.5px dashed var(--rose-mid);
+  background:var(--rose-soft);color:var(--rose-deep);cursor:grab;transition:var(--transition)}
+.qm-chip:hover{background:var(--rose-soft2,var(--rose-soft));border-color:var(--rose)}
+.qm-chip:active{cursor:grabbing}
+.qm-chip-text{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qm-chip-del{flex-shrink:0;width:18px;height:18px;border:none;border-radius:50%;
+  background:rgba(0,0,0,.06);color:var(--ink3);font-size:10px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.qm-chip-del:hover{background:var(--urgent);color:#fff}
+.qm-hint{font-size:11px;color:var(--ink3);margin-top:8px}
+
 /* ─── 필터 바 ─── */
 .filter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .filter-chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -174,6 +196,19 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .mt-recheck{background:#fffbeb;color:#b45309;border:1px solid #fde68a;cursor:pointer;font-weight:800}
 .mt-recheck:hover{background:#fef3c7}
 .mt-recheck.ok{background:var(--routine-bg);color:var(--routine);border-color:#bbf7d0}
+.mt-confirm{background:#eef2ff;color:#4f46e5;border:1px solid #c7d2fe;font-weight:700}
+.mt-confirm.ok{background:var(--routine-bg);color:var(--routine);border-color:#bbf7d0}
+
+/* ─── 그룹장 컨펌 요청 필드/모달 ─── */
+.confirm-field{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px}
+.confirm-check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}
+.confirm-check input{width:15px;height:15px;accent-color:var(--rose);cursor:pointer}
+.confirm-done-tag{font-size:10.5px;font-weight:800;color:var(--routine);background:var(--routine-bg);
+  padding:2px 8px;border-radius:999px;margin-left:auto}
+.confirm-task{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.confirm-task-main{flex:1;min-width:0;cursor:pointer}
+.confirm-task.over .confirm-task-main small{color:var(--urgent);font-weight:800}
+.confirm-btn{flex-shrink:0;font-size:11.5px;padding:6px 12px}
 
 /* ─── 진행률 ─── */
 .prog-track{height:4px;background:#eef3f6;border-radius:999px;overflow:hidden;margin-top:10px}
@@ -318,19 +353,20 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 .wk-day-empty{padding:16px 14px;text-align:center;font-size:12.5px;font-weight:600;color:var(--ink3)}
 
 /* ─── 월간 캘린더 ─── */
-.month-header{display:flex;align-items:center;gap:12px;
+.month-header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--rad-lg);
   padding:14px 18px;margin-bottom:14px;box-shadow:var(--sh-sm)}
 .mh-month{font-weight:800;font-size:18px;letter-spacing:-.5px}
 .mh-year{font-size:14px;color:var(--ink3);font-weight:600;margin-left:2px}
 .mh-nav{display:flex;gap:6px;margin-left:auto}
+.cal-legend-top{padding:0;background:none;border:none;flex:1;justify-content:flex-start;min-width:120px}
 .cal-board{background:var(--surface);border:1px solid var(--border);border-radius:var(--rad-lg);
   box-shadow:var(--sh-sm);overflow:hidden}
 .cal-week-head{display:grid;grid-template-columns:repeat(7,1fr);
-  border-bottom:1px solid var(--border)}
-.cwh-cell{padding:9px;text-align:center;font-size:11px;font-weight:800;color:var(--ink3)}
-.cwh-cell:first-child{color:var(--urgent)}
-.cwh-cell:last-child{color:var(--blue)}
+  border-bottom:1px solid var(--border);background:var(--surface2)}
+.cwh-cell{padding:10px;text-align:center;font-size:11.5px;font-weight:800;color:var(--ink3)}
+.cwh-cell.sun{color:var(--urgent)}
+.cwh-cell.sat{color:var(--blue)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
 .cal-cell{border-right:1px solid var(--border2);border-bottom:1px solid var(--border2);
   min-height:100px;padding:7px 6px;position:relative;transition:background var(--transition)}
@@ -358,25 +394,32 @@ main:has(.tb-root){display:block;padding:0;max-width:none}
 /* 월간 기간 막대 */
 .cal-grid-rows{display:flex;flex-direction:column}
 .cal-week{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border2)}
-.cal-cell2{border-right:1px solid var(--border2);padding:5px 6px}
+.cal-week:last-child{border-bottom:none}
+.cal-cell2{border-right:1px solid var(--border2);padding:6px 7px}
 .cal-cell2:nth-child(7n){border-right:none}
 .cal-cell2.other{background:var(--surface2)}
-.cal-cell2.other .cal-date{opacity:.4}
-.cal-cell2.today{background:var(--rose-soft)}
+.cal-cell2.other .cal-date{opacity:.35}
+.cal-cell2.sun:not(.other){background:rgba(225,29,72,.035)}
+.cal-cell2.sat:not(.other){background:rgba(37,99,235,.035)}
+.cal-cell2.today{background:var(--rose-soft);box-shadow:inset 0 0 0 1.5px var(--rose)}
+.cal-cell2.drop-hover{background:var(--rose-soft)!important;box-shadow:inset 0 0 0 2px var(--rose)}
 .cal-cell2.today .cal-date{background:var(--rose);color:#fff!important;border-radius:50%;
   width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:11px}
 .cal-cell2.sun .cal-date{color:var(--urgent)}
 .cal-cell2.sat .cal-date{color:var(--blue)}
 .cal-bars{position:absolute;inset:0;pointer-events:none}
-.cal-bar{position:absolute;height:18px;border-radius:5px;padding:0 7px;color:#fff;
-  font-size:11px;font-weight:700;display:flex;align-items:center;overflow:hidden;
-  cursor:pointer;pointer-events:auto;box-shadow:0 1px 2px rgba(0,0,0,.12);transition:opacity var(--transition)}
-.cal-bar:hover{opacity:.82}
+.cal-bar{position:absolute;height:20px;border-radius:6px;padding:0 7px;color:#fff;
+  font-size:11px;font-weight:700;display:flex;align-items:center;gap:5px;overflow:hidden;
+  cursor:pointer;pointer-events:auto;box-shadow:0 1px 3px rgba(0,0,0,.16);transition:transform var(--transition),box-shadow var(--transition),opacity var(--transition)}
+.cal-bar:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(0,0,0,.22)}
 .cal-bar.cl{border-top-left-radius:0;border-bottom-left-radius:0}
 .cal-bar.cr{border-top-right-radius:0;border-bottom-right-radius:0}
-.cal-bar.done{opacity:.5}
+.cal-bar.done{opacity:.48}
 .cal-bar.done .cal-bar-text{text-decoration:line-through}
+.cal-bar-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .cal-bar-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-more2{position:absolute;left:3px;right:3px;font-size:10.5px;font-weight:700;color:var(--ink3);
+  padding:1px 7px;cursor:default}
 /* 카드 메모 */
 .tc-memo{font-size:11px;color:var(--ink2);background:var(--surface2);border-radius:6px;
   padding:5px 8px;margin:6px 0 4px;line-height:1.45;white-space:pre-wrap;word-break:break-word}

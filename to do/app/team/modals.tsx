@@ -37,7 +37,10 @@ export function TaskModal({
   const [status, setStatus] = useState(task?.status || "대기");
   const [start, setStart] = useState(task?.start_date || "");
   const [due, setDue] = useState(task?.due_date || "");
+  const [dueTime, setDueTime] = useState(task?.due_time || "");
   const [memo, setMemo] = useState(task?.memo || "");
+  const [needsConfirm, setNeedsConfirm] = useState(task?.needsConfirm || false);
+  const [confirmDeadline, setConfirmDeadline] = useState(task?.confirmDeadline || "");
 
   const storeOptions = useMemo(() => {
     const owned = stores.filter((s) => s.owner === assignee);
@@ -61,7 +64,14 @@ export function TaskModal({
       priority, freq, status,
       start_date: start || null,
       due_date: due || null,
+      due_time: due ? (dueTime || null) : null,
       memo: memo.trim(),
+      quick: false,
+      needsConfirm,
+      confirmDeadline: needsConfirm ? (confirmDeadline || null) : null,
+      confirmed: needsConfirm ? (task?.needsConfirm ? task.confirmed || false : false) : false,
+      confirmed_at: needsConfirm && task?.needsConfirm && task.confirmed ? task.confirmed_at || null : null,
+      confirmed_by: needsConfirm && task?.needsConfirm && task.confirmed ? task.confirmed_by : undefined,
       progress: 0,
       created_at: task?.created_at || Date.now(),
       created_by: task?.created_by || me,
@@ -169,10 +179,27 @@ export function TaskModal({
             <label>마감일</label>
             <input type="date" value={due} min={start || undefined} onChange={(e) => setDue(e.target.value)} />
           </div>
+          <div>
+            <label>마감 시간 <span style={{ fontWeight: 500, color: "var(--ink3)" }}>(선택)</span></label>
+            <input type="time" value={dueTime} disabled={!due} onChange={(e) => setDueTime(e.target.value)} />
+          </div>
         </div>
         <div className="field">
           <label>참조 / 메모</label>
           <textarea className="task-memo" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="참고사항·링크·전달 메모 (선택)" rows={2} />
+        </div>
+        <div className="field confirm-field">
+          <label className="confirm-check">
+            <input type="checkbox" checked={needsConfirm} onChange={(e) => setNeedsConfirm(e.target.checked)} />
+            🙋 그룹장 컨펌 필요
+            {task?.needsConfirm && task.confirmed && <span className="confirm-done-tag">✅ 컨펌완료</span>}
+          </label>
+          {needsConfirm && (
+            <div style={{ marginTop: 8 }}>
+              <label>컨펌 기한 <span style={{ fontWeight: 500, color: "var(--ink3)" }}>(이 날짜까지 그룹장이 확인)</span></label>
+              <input type="date" value={confirmDeadline} onChange={(e) => setConfirmDeadline(e.target.value)} />
+            </div>
+          )}
         </div>
         {task && (task.updated_by || task.created_by) && (
           <div className="modal-note">
@@ -560,6 +587,111 @@ export function WeeklyAlertModal({
         )}
         <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
           <button className="btn btn-primary" onClick={onClose}>확인했어요</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+/* ─── 그룹장 컨펌 요청 ─── */
+export function ConfirmModal({
+  tasks, isLeader, onConfirm, onEdit, onClose,
+}: { tasks: Task[]; isLeader: boolean; onConfirm: (id: string) => void; onEdit: (t: Task) => void; onClose: () => void }) {
+  const overdue = tasks.filter((t) => (daysLeft(t.confirmDeadline) ?? 0) < 0);
+  const pending = tasks.filter((t) => (daysLeft(t.confirmDeadline) ?? 0) >= 0);
+  const row = (t: Task) => {
+    const n = daysLeft(t.confirmDeadline);
+    const over = n !== null && n < 0;
+    return (
+      <div key={t.id} className={`walert-task confirm-task ${over ? "over" : ""}`}>
+        <div className="confirm-task-main" onClick={() => onEdit(t)}>
+          <span>{t.title}</span>
+          <small>{t.assignee} · 컨펌기한 {t.confirmDeadline ? `${t.confirmDeadline.slice(5)} (${dueLabel(t.confirmDeadline)})` : "미지정"}</small>
+        </div>
+        {isLeader && (
+          <button className="btn btn-primary confirm-btn" onClick={(e) => { e.stopPropagation(); onConfirm(t.id); }}>✅ 승인</button>
+        )}
+      </div>
+    );
+  };
+  return (
+    <Overlay onClose={onClose}>
+      <div className="modal" style={{ maxWidth: 480 }}>
+        <div className="modal-head">
+          <h3>🙋 그룹장 컨펌 요청</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--ink2)", marginBottom: 14 }}>
+          {isLeader ? "매니저들이 요청한 컨펌 대기 목록입니다. 기한 내에 확인해 주세요." : "내가 요청한 컨펌 대기 현황입니다."}
+        </p>
+        {tasks.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--ink3)", textAlign: "center", padding: "16px 0" }}>
+            대기 중인 컨펌 요청이 없습니다. 👍
+          </div>
+        ) : (
+          <div className="walert-list">
+            {overdue.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--urgent)", padding: "2px 2px 4px" }}>⏰ 기한 지남</div>}
+            {overdue.map(row)}
+            {pending.length > 0 && overdue.length > 0 && <div style={{ fontSize: 11, fontWeight: 800, color: "var(--ink3)", padding: "8px 2px 4px" }}>대기 중</div>}
+            {pending.map(row)}
+          </div>
+        )}
+        <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+/* ─── 알림 설정 (마감 시간 N분 전 브라우저 알림) ─── */
+export function NotifySettingsModal({
+  leadMinutes, onSaveLead, onClose,
+}: { leadMinutes: number; onSaveLead: (n: number) => void; onClose: () => void }) {
+  const [lead, setLead] = useState(String(leadMinutes));
+  const supported = typeof window !== "undefined" && "Notification" in window;
+  const [perm, setPerm] = useState<NotificationPermission>(supported ? Notification.permission : "denied");
+
+  const save = () => {
+    const n = parseInt(lead, 10);
+    if (isNaN(n) || n < 0) { alert("0 이상의 숫자로 입력해 주세요."); return; }
+    onSaveLead(n);
+  };
+  const enableNoti = () => {
+    if (!supported) { alert("이 브라우저는 알림을 지원하지 않아요."); return; }
+    Notification.requestPermission().then((p) => setPerm(p));
+  };
+
+  return (
+    <Overlay onClose={onClose}>
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-head">
+          <h3>⏰ 알림 설정</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="field">
+          <label>마감 시간 몇 분 전에 알릴까요?</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            마감
+            <input
+              type="number" min={0} value={lead} onChange={(e) => setLead(e.target.value)}
+              style={{ width: 70, textAlign: "center" }}
+            />
+            분 전
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <button className="btn btn-ghost btn-sm" onClick={save}>설정 저장</button>
+          <button className="btn btn-ghost btn-sm" onClick={enableNoti}>
+            {perm === "granted" ? "브라우저 알림 켜짐 ✓" : "브라우저 알림 켜기"}
+          </button>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--ink3)", lineHeight: 1.6 }}>
+          내 담당 업무 중 <b>마감 시간(마감일 + 마감 시간)</b>이 설정된 항목만 알림 대상입니다.
+          이 탭(브라우저)이 열려 있는 동안 설정한 시간 전에 알려드려요.
+        </p>
+        <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" onClick={onClose}>닫기</button>
         </div>
       </div>
     </Overlay>
